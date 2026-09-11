@@ -16,8 +16,8 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci --ignore-scripts
-      - run: cargo install wasm-tools --version 1.240.0 --locked
       - run: node scripts/prepare-graph.mjs
+      - run: cargo install wasm-tools --version 1.240.0 --locked
       - run: ./kotlin test -m shared -p jvm
       - run: ./kotlin test -m graph -p jvm
       - run: npm run build

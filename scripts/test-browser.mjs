@@ -60,7 +60,7 @@ try {
       const canvas = frame.locator('canvas').first();
       await canvas.waitFor();
       const points = {};
-      for (const label of ['列表', '图谱', '新建记忆', '导入来源']) {
+      for (const label of ['列表', '图谱', '新建记忆', '导入来源', '刷新']) {
         const bounds = await frame.getByRole('button', { name: label, exact: true }).boundingBox();
         assert(bounds, `Missing control ${label}`);
         points[label] = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
@@ -117,9 +117,22 @@ try {
       await click(frame.getByRole('button', { name: '保存', exact: true }));
       assert.equal((await payload(await update)).version, 2);
       await pause(300); await reload(page); await select(page, frame, title, node.id);
+      await sdk(frame, 'PUT', `/nodes/${node.id}`, { title, content: 'Updated in another session', version: 2 });
+      if (name === 'mobile') {
+        await click(frame.getByRole('button', { name: '关闭详情', exact: true }));
+        const refreshedGraph = responseFor(page, 'GET', '/graph');
+        await pointer('刷新'); await page.mouse.move(16, 16);
+        assert.equal((await payload(await refreshedGraph)).nodes.find(value => value.id === node.id).version, 3);
+        await pause(300); await reload(page); await select(page, frame, title, node.id);
+      } else {
+        const refreshedNode = responseFor(page, 'GET', `/nodes/${node.id}`);
+        await pointer('刷新'); await page.mouse.move(16, 16);
+        assert.equal((await payload(await refreshedNode)).version, 3);
+      }
+      await pause(300);
       await click(frame.getByRole('button', { name: '删除记忆', exact: true }));
       await click(frame.getByRole('button', { name: '取消', exact: true }));
-      assert.equal((await sdk(frame, 'GET', `/nodes/${node.id}`)).content, 'Updated from Compose');
+      assert.equal((await sdk(frame, 'GET', `/nodes/${node.id}`)).content, 'Updated in another session');
       await reload(page); await select(page, frame, title, node.id);
       await click(frame.getByRole('button', { name: '删除记忆', exact: true }));
       const deletion = responseFor(page, 'DELETE', `/nodes/${node.id}`);

@@ -53,6 +53,13 @@ internal class MemoryState(private val scope: CoroutineScope) {
     fun refresh(search: Boolean = false) = run {
         if (search) serverQuery = query
         graph = MemoryClient.graph(serverQuery)
+        selected?.let { previous ->
+            graph.nodes.firstOrNull { it.id == previous.id }?.let(::select) ?: closeDetail()
+        }
+    }
+    fun clearSearch() {
+        query = ""
+        if (serverQuery.isNotEmpty()) refresh(search = true)
     }
     fun select(node: MemoryNode) {
         selected = node

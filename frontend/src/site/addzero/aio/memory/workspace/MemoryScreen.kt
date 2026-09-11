@@ -109,7 +109,7 @@ private fun Header(state: MemoryState, compact: Boolean) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(state.query, { state.query = it }, Modifier.weight(1f), singleLine = true,
                 placeholder = { Text("搜索记忆") }, leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = { if (state.query.isNotEmpty()) Tool("清空搜索", Icons.Default.Close) { state.query = "" } })
+                trailingIcon = { if (state.query.isNotEmpty()) Tool("清空搜索", Icons.Default.Close, !state.busy) { state.clearSearch() } })
             Tool("搜索全部记忆", Icons.Default.Search, !state.busy) { state.refresh(search = true) }
             Tool("刷新", Icons.Default.Refresh, !state.busy) { state.refresh() }
         }

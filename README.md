@@ -40,6 +40,8 @@ cargo build --locked --manifest-path dev/Cargo.toml
 
 `graph/source.lock.json` 固定 `az-compose` 的 Git SHA。构建时读取该提交的通用图谱文件，不维护组件源码副本；可设置 `AIO_GRAPH_SOURCE` 使用已有本地 Git 缓存。`--working-tree` 只用于组件联调，发布必须用锁定提交重新构建。
 
+**图谱上游 `az-compose` 当前为私有仓库，构建需要它的只读访问权限。** 本机可使用 `AIO_GRAPH_SOURCE=../kmp-aio/lib/compose/az-compose npm run build`；该方式仍按锁定提交读取，不会带入未提交改动。公开插件仓库不包含该私有源码。GitHub CI 目前缺少上游只读权限，完整构建尚未通过；不要把个人令牌提交到代码或为解决构建擅自改变上游可见性。
+
 WIT 绑定来自 `aio-platform/lib/plugin/contract/wit/plugin.wit`。`backend/contract/` 保存逐字复制、摘要锁定的 SDK 契约快照，使插件可以独立构建；不是另一个自定义协议。设置 `AIO_PLATFORM` 时还会检查平台契约是否一致。使用 Kotlin 官方 `wit-bindgen` 分支提交 `700f2db5e1d01f7bee8d756750c6f631171f520e` 生成：
 
 ```sh

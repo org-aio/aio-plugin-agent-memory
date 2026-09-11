@@ -12,7 +12,12 @@ if (!repo) {
   mkdirSync(repo, { recursive: true });
   execFileSync('git', ['init', '-q', repo]);
   try { execFileSync('git', ['-C', repo, 'cat-file', '-e', `${lock.revision}^{commit}`], { stdio: 'ignore' }); }
-  catch { execFileSync('git', ['-C', repo, 'fetch', '--filter=blob:none', '--depth=1', lock.git, lock.revision], { stdio: 'inherit' }); }
+  catch {
+    try { execFileSync('git', ['-C', repo, 'fetch', '--filter=blob:none', '--depth=1', lock.git, lock.revision], { stdio: 'inherit' }); }
+    catch {
+      throw new Error('Cannot fetch the locked graph dependency. az-compose is private: configure read-only Git access or set AIO_GRAPH_SOURCE to an authorized local checkout. See README.md.');
+    }
+  }
 }
 const working = process.argv.includes('--working-tree');
 if (working && !process.env.AIO_GRAPH_SOURCE) throw new Error('--working-tree requires AIO_GRAPH_SOURCE');
