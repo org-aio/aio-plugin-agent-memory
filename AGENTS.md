@@ -1,4 +1,7 @@
-# Memory 开发约定
+# Agent Memory 开发约定
+
+- 父插件 aio-plugin-agent；当前子插件 aio-plugin-agent-memory。其他子插件一律 aio-plugin-agent-<功能名>，不另起 aio-plugin-<子功能> 顶级名。
+- Kotlin 代码属于 site.addzero.aio.agent.memory，数据库表名和现存业务数据不得因仓库改名而重建或清空。
 
 - 前端、后端和 shared 同仓、同版本发布，前端使用真实 Compose。
 - 业务模型不依赖 Compose；界面交互优先本地状态，读写才调用服务。

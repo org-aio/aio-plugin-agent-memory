@@ -1,5 +1,5 @@
 {
-  "name": "aio-plugin-memory-dev",
+  "name": "aio-plugin-agent-memory-dev",
   "private": true,
   "type": "module",
   "scripts": {

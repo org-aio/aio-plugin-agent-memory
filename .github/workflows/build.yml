@@ -1,4 +1,4 @@
-name: Build Memory
+name: Build Agent Memory
 on:
   push:
   pull_request:
@@ -23,5 +23,5 @@ jobs:
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
-          name: memory-component-and-frontend
+          name: agent-memory-component-and-frontend
           path: dist/

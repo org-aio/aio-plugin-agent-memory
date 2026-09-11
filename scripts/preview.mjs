@@ -13,7 +13,7 @@ const assets = await realpath(resolve(root, 'dist/frontend'));
 const port = Number(process.env.PORT || 4191);
 const origin = `http://127.0.0.1:${port}`;
 const ticket = randomBytes(32).toString('hex');
-const child = spawn(resolve(root, 'dev/target/debug/aio-memory-dev'), process.argv.includes('--demo') ? ['--demo'] : [], { cwd: root, env: process.env, stdio: ['pipe', 'pipe', 'inherit'] });
+const child = spawn(resolve(root, 'dev/target/debug/aio-agent-memory-dev'), process.argv.includes('--demo') ? ['--demo'] : [], { cwd: root, env: process.env, stdio: ['pipe', 'pipe', 'inherit'] });
 const lines = createInterface({ input: child.stdout });
 const waiting = [];
 let readyResolve, readyReject;

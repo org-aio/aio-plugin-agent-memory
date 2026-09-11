@@ -1,0 +1,5 @@
+{
+  "repository": "aio-plugin-agent-memory",
+  "parent": "aio-plugin-agent",
+  "feature": "memory"
+}

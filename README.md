@@ -1,4 +1,8 @@
-# AIO Memory
+# AIO Agent Memory
+
+仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`；Kotlin 命名空间为 `site.addzero.aio.agent.memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
+
+本次先规范仓库归属与命名，记忆服务仍保留原有前后端实现和正式数据。父插件的自动组合安装、跨插件检索授权与联合回滚尚未接入，不以命名文件冒充宿主生命周期支持。
 
 独立的全栈记忆插件：真实 Compose 图谱界面 + Kotlin Wasm Component 后端 + PostgreSQL。
 前后端、模型、迁移以一个包发布和回滚，没有 JVM，也没有宿主预设控件协议。
@@ -58,7 +62,7 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 
 ```sh
 export AIO_TEST_DATABASE_URL='postgres://developer@127.0.0.1:55432/memory_dev'
-dev/target/debug/aio-memory-dev --verify
+dev/target/debug/aio-agent-memory-dev --verify
 npm run preview -- --demo
 npm run test:browser
 ```
