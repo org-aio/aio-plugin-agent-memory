@@ -1,0 +1,15 @@
+[package]
+name = "aio-memory-dev"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0.99"
+az-plugin-contract = { path = "../../aio-platform/lib/plugin/contract" }
+az-plugin-runtime = { path = "../../aio-platform/lib/plugin/runtime" }
+serde_json = "1.0.145"
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "io-util", "io-std"] }
+uuid = { version = "1.23.1", features = ["v4"] }

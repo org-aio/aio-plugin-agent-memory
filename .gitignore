@@ -1,0 +1,10 @@
+build/
+dist/
+graph/src/
+node_modules/
+.kotlin/
+.amper/
+.idea/
+.env
+test-results/
+dev/target/

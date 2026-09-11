@@ -1,0 +1,27 @@
+name: Build Memory
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  component:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci --ignore-scripts
+      - run: cargo install wasm-tools --version 1.240.0 --locked
+      - run: node scripts/prepare-graph.mjs
+      - run: ./kotlin test -m shared -p jvm
+      - run: ./kotlin test -m graph -p jvm
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-component-and-frontend
+          path: dist/

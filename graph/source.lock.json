@@ -1,0 +1,10 @@
+{
+  "git": "https://github.com/zjarlin/az-compose.git",
+  "revision": "169cc1d85ee7c3dda8847fa54248db50145fa154",
+  "root": "src/commonMain/kotlin/site/addzero/component/knowledge_graph",
+  "files": [
+    "GraphSearchTraversal.kt", "NodeState.kt", "model/GraphData.kt",
+    "model/GraphNode.kt", "model/GraphEdge.kt", "model/NodeCategory.kt",
+    "model/EdgeType.kt", "layout/ForceDirectedLayout.kt", "main_logic/KnowledgeGraph.kt"
+  ]
+}
