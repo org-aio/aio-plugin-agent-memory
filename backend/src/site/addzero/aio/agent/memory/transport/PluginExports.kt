@@ -21,14 +21,14 @@ internal object PluginRootFunctionsExportsImpl : PluginRootFunctions.Exports {
 
     override fun describe() =
         Metadata.Description(
-            "Agent Memory",
+            "智能体记忆",
             listOf(
                 Metadata.PageDefinition(
                     "agent-memory",
                     "记忆图谱",
                     "index.html",
                     Metadata.Scene("community", "社区插件"),
-                    listOf("Agent"),
+                    listOf("智能体"),
                     null,
                     Metadata.Surface.WORKSPACE,
                 )

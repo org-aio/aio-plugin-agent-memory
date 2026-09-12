@@ -1,4 +1,4 @@
-# AIO Agent Memory
+# 智能体记忆
 
 仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`；Kotlin 命名空间为 `site.addzero.aio.agent.memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
 

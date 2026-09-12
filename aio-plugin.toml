@@ -4,11 +4,12 @@ schema_version = 2
 permissions = ["memory:compile"]
 
 [plugin.marketplace]
-title = "Agent Memory"
-summary = "Agent 的可选记忆插件，管理知识空间、来源、知识图谱和独立授权的秘密。"
+title = "智能体记忆"
+summary = "智能体的可选记忆插件，管理知识空间、来源、知识图谱和独立授权的秘密。"
 license = "MIT"
-tags = ["Agent", "知识库", "记忆"]
+tags = ["智能体", "知识库", "记忆"]
 parent = "https://github.com/zjarlin/aio-plugin-agent.git"
+parent_title = "智能体"
 
 [plugin.runtime]
 artifact = "dist/plugin.wasm"
