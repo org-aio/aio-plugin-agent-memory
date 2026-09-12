@@ -18,6 +18,7 @@ internal fun statusLabel(status: String) =
         "pending" -> "已接收"
         "processing" -> "整理中"
         "complete" -> "已整理"
+        "recorded" -> "对话来源"
         "quarantined" -> "保密待处理"
         "conflict" -> "待核实"
         "failed" -> "整理失败"
@@ -99,7 +100,9 @@ internal fun IntakeList(state: MemoryState, modifier: Modifier) {
             }
         } else {
             val sources =
-                state.sources.filter { state.view != "pending" || it.status != "complete" }
+                state.sources.filter {
+                    state.view != "pending" || it.status !in setOf("complete", "recorded")
+                }
             if (sources.isEmpty()) item { Text("暂无资料", Modifier.padding(24.dp)) }
             items(sources, key = { it.id }) { source ->
                 ListItem(

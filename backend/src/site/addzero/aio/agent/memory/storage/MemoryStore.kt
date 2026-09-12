@@ -187,14 +187,14 @@ internal class MemoryStore(val db: DatabaseSession, val access: SpaceAccess, val
         db.execute("DELETE FROM plugin_memory_edges WHERE id=\$1", listOf(text(id)))
     }
 
-    fun graph(search: SearchRequest): MemoryGraph {
+    fun graph(search: SearchRequest, includeEdges: Boolean = true): MemoryGraph {
         access.require(spaceId)
         if (search.query.length > 256 || search.limit !in 1..200) throw InputFailure("搜索条件超出限制")
         val pattern =
             "%" + search.query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         val params = listOf(text(spaceId), text(pattern), text(search.kind?.name ?: ""))
         val where =
-            "$visible AND (n.title ILIKE \$2 OR n.content ILIKE \$2 OR n.tags::text ILIKE \$2 OR EXISTS (SELECT 1 FROM plugin_memory_aliases a WHERE a.node_id=n.id AND a.alias ILIKE \$2)) AND (\$3='' OR n.kind=\$3)"
+            "$visible AND NOT EXISTS (SELECT 1 FROM plugin_memory_sources s WHERE s.id=n.id AND s.status='recorded') AND (n.title ILIKE \$2 OR n.content ILIKE \$2 OR n.tags::text ILIKE \$2 OR EXISTS (SELECT 1 FROM plugin_memory_aliases a WHERE a.node_id=n.id AND a.alias ILIKE \$2)) AND (\$3='' OR n.kind=\$3)"
         val count =
             db.query("SELECT count(*) FROM plugin_memory_nodes n WHERE $where", params)
                 .first()
@@ -205,14 +205,14 @@ internal class MemoryStore(val db: DatabaseSession, val access: SpaceAccess, val
                     params + number(search.limit.toLong()),
                 )
                 .map(::node)
-        val edges = links(nodes.map { it.id }, internalOnly = true)
+        val edges = if (includeEdges) links(nodes.map { it.id }, internalOnly = true) else emptyList()
         return MemoryGraph(nodes, edges.take(800), count, count > nodes.size || edges.size > 800)
     }
 
     fun links(ids: List<String>, internalOnly: Boolean = false): List<MemoryEdge> {
         if (ids.isEmpty()) return emptyList()
         if (ids.size > 200) throw InputFailure("一次最多查询 200 个节点")
-        ids.forEach(::get)
+        if (!visibility(ids).toSet().containsAll(ids)) throw MissingRecord()
         val slots = ids.indices.joinToString(",") { "\$${it + 2}" }
         val join = if (internalOnly) "AND" else "OR"
         return db.query(

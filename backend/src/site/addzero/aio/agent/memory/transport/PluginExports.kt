@@ -8,8 +8,11 @@ import site.addzero.aio.agent.memory.bindings.*
 import site.addzero.aio.agent.memory.bindings.PluginRootFunctions
 import site.addzero.aio.agent.memory.intake.*
 import site.addzero.aio.agent.memory.model.*
+import site.addzero.aio.agent.memory.retrieval.activation
 import site.addzero.aio.agent.memory.retrieval.exportContext
 import site.addzero.aio.agent.memory.retrieval.recall
+import site.addzero.aio.agent.memory.retrieval.route
+import site.addzero.aio.agent.memory.routing.*
 import site.addzero.aio.agent.memory.storage.DatabaseSession
 import site.addzero.aio.agent.memory.storage.MemoryStore
 
@@ -148,6 +151,18 @@ internal object PluginRootFunctionsExportsImpl : PluginRootFunctions.Exports {
                         respond(200, store.graph(Json.decodeFromString<SearchRequest>(body)))
                     request.path == "/recall" && request.method == "POST" ->
                         respond(200, store.recall(Json.decodeFromString<RecallRequest>(body)))
+                    request.path == "/route" && request.method == "POST" ->
+                        respond(
+                            200,
+                            store.route(
+                                intake.source(Json.decodeFromString<RouteRequest>(body).sourceId)
+                            ),
+                        )
+                    request.path == "/activation" && request.method == "POST" ->
+                        respond(
+                            200,
+                            store.activation(Json.decodeFromString<ActivationRequest>(body)),
+                        )
                     request.path == "/visibility" && request.method == "POST" ->
                         respond(
                             200,

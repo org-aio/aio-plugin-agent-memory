@@ -5,6 +5,8 @@ import site.addzero.aio.agent.memory.storage.MemoryStore
 
 internal fun MemoryStore.recall(request: RecallRequest): MemoryGraph {
     if (request.query.length > 100_000 || request.limit !in 1..24) throw InputFailure("检索条件无效")
+    if (request.excludeIds.size > 24) throw InputFailure("排除节点过多")
+    request.excludeIds.forEach(::requireId)
     val question = request.query.replace(Regex("\\[\\[secret:[a-f0-9]{32}]]"), "")
     val words = question.split(Regex("[^A-Za-z0-9_\\u4e00-\\u9fff]+")).filter { it.length in 2..80 }
     val stop =
@@ -35,10 +37,21 @@ internal fun MemoryStore.recall(request: RecallRequest): MemoryGraph {
     val scores = mutableMapOf<String, Int>()
     val matches = linkedMapOf<String, MemoryNode>()
     for (term in terms) {
-        graph(SearchRequest(term, limit = 24)).nodes.forEach { node ->
-            matches[node.id] = node
-            scores[node.id] = (scores[node.id] ?: 0) + if (node.title.contains(term)) 3 else 1
-        }
+        graph(SearchRequest(term, limit = 24), includeEdges = false)
+            .nodes
+            .filter { it.id !in request.excludeIds }
+            .forEach { node ->
+                matches[node.id] = node
+                scores[node.id] =
+                    (scores[node.id] ?: 0) +
+                        when {
+                            node.title.equals(question, true) ||
+                                node.aliases.any { it.equals(question, true) } -> 12
+                            node.title.contains(term, true) ||
+                                node.aliases.any { it.contains(term, true) } -> 3
+                            else -> 1
+                        }
+            }
     }
     val nodes = matches.values.sortedByDescending { scores[it.id] }.take(request.limit)
     return MemoryGraph(

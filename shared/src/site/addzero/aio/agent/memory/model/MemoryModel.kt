@@ -64,7 +64,12 @@ data class MemoryGraph(
 @Serializable
 data class SearchRequest(val query: String = "", val kind: NodeKind? = null, val limit: Int = 200)
 
-@Serializable data class RecallRequest(val query: String, val limit: Int = 8)
+@Serializable
+data class RecallRequest(
+    val query: String,
+    val limit: Int = 8,
+    val excludeIds: List<String> = emptyList(),
+)
 
 @Serializable data class VisibilityRequest(val nodeIds: List<String>)
 

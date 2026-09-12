@@ -18,7 +18,7 @@
 | POST | `/sources/{id}/resolve` | `{accept,versions?}`，接受修订必须携带查看过的条目版本 |
 | POST | `/import` | `{requestId,title,text,url?}`，文件/文本采用同一隔离管线，重试不重复创建来源 |
 
-`SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict 或 failed。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
+`SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict、failed 或 recorded。recorded 表示明确查找的对话来源，保留收件但不生成 wiki 任务，也不参与普通检索与图谱。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
 
 `origin` 为 chat/note/import。`clarifies` 指向同一原对话、同一提交者的保密暂存资料；仅明确的整段秘密用途说明可以解除暂存，未识别说明不改变原来源。加密原文保留，净化版本和说明来源留痕。
 
@@ -44,7 +44,9 @@
 |---|---|---|
 | GET | `/graph` | 最近 200 个节点摘要和至多 800 条关系 |
 | POST | `/search` | `{query,kind?,limit?}`，标题、正文、标签、别名搜索 |
-| POST | `/recall` | `{query,limit?}`，关键词与图谱检索候选，至多 24 项 |
+| POST | `/recall` | `{query,limit?,excludeIds?}`，关键词与图谱检索候选，至多 24 项 |
+| POST | `/route` | `{sourceId}`，仅从当前空间已净化来源分类，返回 route、reply、context、citations、matchedNodeIds、activatedNodeIds |
+| POST | `/activation` | `{nodeIds?}`，至多 24 个种子；优先包含种子和一层邻域，返回至多 120 节点、800 边，正文为空，过期或不可见种子被移除 |
 | POST | `/visibility` | `{nodeIds}`，至多 400 个 ID，返回当前仍可见的 ID |
 | POST/PUT | `/nodes`、`/nodes/{id}` | `NodeDraft`，编辑必须带当前 version |
 | GET/DELETE | `/nodes/{id}` | 完整节点或删除；来源删除清除密文并停止派生内容召回 |
