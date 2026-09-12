@@ -1,3 +1,4 @@
+mod configuration;
 mod verification;
 
 use anyhow::{Context, Result, ensure};
@@ -40,7 +41,8 @@ async fn call(
             },
             context(tenant),
         )
-        .await?;
+        .await
+        .with_context(|| format!("Memory verification request: {method} {path}"))?;
     Ok(
         json!({"status": response.status, "body": if response.body.is_empty() { Value::Null } else { serde_json::from_slice::<Value>(&response.body)? }}),
     )
@@ -48,25 +50,55 @@ async fn call(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .init();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("缺少插件目录")?;
-    let source = format!("memory-dev-{}", uuid::Uuid::new_v4());
+    let verifying = std::env::args().any(|arg| arg == "--verify");
+    let (source, keyring) = configuration::load(root, verifying)?;
     let provisioner =
         DatabaseProvisioner::connect(&std::env::var("AIO_TEST_DATABASE_URL")?).await?;
-    let migration = std::fs::read_to_string(root.join("backend/migrations/0001_memory.sql"))?;
-    let database = provisioner.create(&source, "preview", &migration).await?;
+    let mut files: Vec<_> = std::fs::read_dir(root.join("backend/migrations"))?
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sql"))
+        .collect();
+    files.sort();
+    let migrations = files
+        .iter()
+        .map(|path| {
+            Ok((
+                path.file_name().unwrap().to_string_lossy().into_owned(),
+                std::fs::read_to_string(path)?,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let migration = migrations
+        .iter()
+        .map(|(_, sql)| sql.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let database = provisioner
+        .install(&source, "preview", &migrations, &keyring)
+        .await?;
     let scope = InvocationScope {
         source_id: source.clone(),
         revision: "development".into(),
         context: context("preview"),
         grants: CapabilityGrants {
             database: true,
+            cryptography: true,
             ..Default::default()
         },
     };
     let resources = InvocationResources {
         database: Some(database),
+        keyring: Some(std::sync::Arc::new(keyring)),
+        services: Some(std::sync::Arc::new(configuration::DevelopmentServices)),
         ..Default::default()
     };
     let engine = ComponentEngine::new()?;
@@ -83,7 +115,7 @@ async fn main() -> Result<()> {
     instance.lifecycle(Phase::Prepare).await?;
     instance.health().await?;
     instance.lifecycle(Phase::Activate).await?;
-    if std::env::args().any(|arg| arg == "--verify") {
+    if verifying {
         return verification::verify(
             &engine,
             &compiled,
@@ -101,7 +133,7 @@ async fn main() -> Result<()> {
             &mut instance,
             "POST",
             "/import",
-            json!({"title":"记忆工作台设计记录", "text":source_text}),
+            json!({"requestId":uuid::Uuid::new_v4(),"title":"记忆工作台设计记录", "text":source_text}),
             "preview",
         )
         .await?;
@@ -113,10 +145,13 @@ async fn main() -> Result<()> {
         let result = async {
             let value: Value = serde_json::from_str(&line)?;
             let body: Vec<u8> = serde_json::from_value(value["body"].clone())?;
+            let mut request_context = context("preview");
+            request_context.user_id = Some(value["userId"].as_str().unwrap_or("developer").into());
+            request_context.session_id = Some(if value["worker"].as_bool()==Some(true) {"service:agent"} else {"preview-browser"}.into());
             let response = instance.handle(Request {
                 method: value["method"].as_str().context("缺少请求方法")?.into(),
-                path: value["path"].as_str().context("缺少请求路径")?.into(), query: None, headers: vec![], body,
-            }, context("preview")).await?;
+                path: value["path"].as_str().context("缺少请求路径")?.into(), query: value["query"].as_str().map(str::to_owned), headers: vec![], body,
+            }, request_context).await?;
             Ok::<_, anyhow::Error>(json!({"status":response.status,"headers":response.headers.iter().map(|h| json!({"name":h.name,"value":h.value})).collect::<Vec<_>>(),"body":response.body}))
         }.await;
         match result {

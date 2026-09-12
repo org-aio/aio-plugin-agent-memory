@@ -1,5 +1,5 @@
 {
   "interface": "aio:plugin@2.0.0",
   "source": "aio-platform/lib/plugin/contract/wit/plugin.wit",
-  "sha256": "9726c863635adc3636ed78cf99dfd0711cfbec2ad02415b9c6afb96c8da2cf85"
+  "sha256": "a89804ded43afcdac86e823ea401e9240ccf52bca276b8617cdc32816c573e43"
 }

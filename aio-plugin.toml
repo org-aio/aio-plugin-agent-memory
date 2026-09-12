@@ -12,3 +12,4 @@ migrations = "backend/migrations"
 
 [plugin.capabilities]
 database = true
+cryptography = true

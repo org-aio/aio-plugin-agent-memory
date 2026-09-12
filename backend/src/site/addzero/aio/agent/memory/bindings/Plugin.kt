@@ -529,6 +529,97 @@ companion object Import : site.addzero.aio.agent.memory.bindings.Storage {
 
 }
 
+@WitInterface("aio:plugin/cryptography@2.0.0")
+internal /*external */interface Cryptography {
+@WitImport
+companion object Import : site.addzero.aio.agent.memory.bindings.Cryptography {
+  // <editor-fold defaultstate="collapsed" desc="Generated Import Code">
+  override fun seal(purpose: kotlin.String, plaintext: kotlin.collections.List<kotlin.UByte>): kotlin.Result<kotlin.collections.List<kotlin.UByte>> {
+    // <editor-fold defaultstate="collapsed" desc="Generated Canonical ABI Adapter Code">
+    kotlin.wasm.unsafe.withScopedMemoryAllocator { allocator ->
+
+      val bytearray = purpose.encodeToByteArray()
+      val len = bytearray.size
+      val ptr = allocator.writeToLinearMemory(bytearray).address.toInt()
+
+
+      val address = allocator.allocate(plaintext.size * 1 /*, align_wasm32=1*/).address.toInt()
+      for (iter in plaintext.withIndex()) {
+        val index = iter.index
+        val el = iter.value
+        val base = address + (index * 1)
+        (base + 0).ptr.storeByte(el.toInt().toByte())
+
+      }
+      val ptr0 = /* RETURN_ADDRESS_ALLOC(size_wasm32=(3*4), align=4)*/ allocator.allocate((3*4)).address.toInt()
+      __wasm_import_seal(ptr, len, address, plaintext.size, ptr0)
+      kotlin.wasm.unsafe.freeAllComponentModelReallocAllocatedMemory();
+      val result = if ((ptr0 + 0).ptr.loadUByte().toInt()== 0) {
+
+        val list = kotlin.collections.ArrayList<kotlin.UByte>((ptr0 + (2*4)).ptr.loadInt())
+        for (i in 0 until (ptr0 + (2*4)).ptr.loadInt()) {
+          val base = ((ptr0 + 4).ptr.loadInt()) + (i * 1)
+
+          list.add((base + 0).ptr.loadUByte().toInt().toUByte())
+        }
+
+        kotlin.Result.success<kotlin.collections.List<kotlin.UByte>>(list)
+      } else {
+        kotlin.Result.failure<kotlin.collections.List<kotlin.UByte>>(site.addzero.aio.agent.memory.bindings.runtime.ComponentException(site.addzero.aio.agent.memory.bindings.runtime.STRING_FROM_MEM((ptr0 + 4).ptr.loadInt(), (ptr0 + (2*4)).ptr.loadInt())))
+      }
+      return result
+    }
+    // </editor-fold>
+  }
+  override fun open(purpose: kotlin.String, ciphertext: kotlin.collections.List<kotlin.UByte>): kotlin.Result<kotlin.collections.List<kotlin.UByte>> {
+    // <editor-fold defaultstate="collapsed" desc="Generated Canonical ABI Adapter Code">
+    kotlin.wasm.unsafe.withScopedMemoryAllocator { allocator ->
+
+      val bytearray = purpose.encodeToByteArray()
+      val len = bytearray.size
+      val ptr = allocator.writeToLinearMemory(bytearray).address.toInt()
+
+
+      val address = allocator.allocate(ciphertext.size * 1 /*, align_wasm32=1*/).address.toInt()
+      for (iter in ciphertext.withIndex()) {
+        val index = iter.index
+        val el = iter.value
+        val base = address + (index * 1)
+        (base + 0).ptr.storeByte(el.toInt().toByte())
+
+      }
+      val ptr0 = /* RETURN_ADDRESS_ALLOC(size_wasm32=(3*4), align=4)*/ allocator.allocate((3*4)).address.toInt()
+      __wasm_import_open(ptr, len, address, ciphertext.size, ptr0)
+      kotlin.wasm.unsafe.freeAllComponentModelReallocAllocatedMemory();
+      val result = if ((ptr0 + 0).ptr.loadUByte().toInt()== 0) {
+
+        val list = kotlin.collections.ArrayList<kotlin.UByte>((ptr0 + (2*4)).ptr.loadInt())
+        for (i in 0 until (ptr0 + (2*4)).ptr.loadInt()) {
+          val base = ((ptr0 + 4).ptr.loadInt()) + (i * 1)
+
+          list.add((base + 0).ptr.loadUByte().toInt().toUByte())
+        }
+
+        kotlin.Result.success<kotlin.collections.List<kotlin.UByte>>(list)
+      } else {
+        kotlin.Result.failure<kotlin.collections.List<kotlin.UByte>>(site.addzero.aio.agent.memory.bindings.runtime.ComponentException(site.addzero.aio.agent.memory.bindings.runtime.STRING_FROM_MEM((ptr0 + 4).ptr.loadInt(), (ptr0 + (2*4)).ptr.loadInt())))
+      }
+      return result
+    }
+    // </editor-fold>
+  }
+  // </editor-fold>
+}
+  // START OF TYPES
+
+
+  // END OF TYPES
+
+  fun seal(purpose: kotlin.String, plaintext: kotlin.collections.List<kotlin.UByte>): kotlin.Result<kotlin.collections.List<kotlin.UByte>>
+  fun open(purpose: kotlin.String, ciphertext: kotlin.collections.List<kotlin.UByte>): kotlin.Result<kotlin.collections.List<kotlin.UByte>>
+
+}
+
 @WitInterface("aio:plugin/transport@2.0.0")
 internal /*external */interface Transport {
 @WitImport

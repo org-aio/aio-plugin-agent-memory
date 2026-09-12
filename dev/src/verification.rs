@@ -53,7 +53,7 @@ pub async fn verify(
     )
     .await?;
     ensure!(invalid["status"] == 400, "输入校验失败");
-    let imported = call(instance, "POST", "/import", json!({"title":"设计笔记", "text":"[[PostgreSQL]] 保存 [[知识图谱]]，[[PostgreSQL]] 是来源。", "url":"https://example.com/note"}), "preview").await?;
+    let imported = call(instance, "POST", "/import", json!({"requestId":uuid::Uuid::new_v4(),"title":"设计笔记", "text":"[[PostgreSQL]] 保存 [[知识图谱]]，[[PostgreSQL]] 是来源。", "url":"https://example.com/note"}), "preview").await?;
     ensure!(
         imported["status"] == 201 && imported["body"]["linkedNodes"] == 2,
         "导入失败: {imported}"

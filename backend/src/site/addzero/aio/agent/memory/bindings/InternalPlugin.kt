@@ -52,6 +52,14 @@ internal external fun __wasm_import_remove(p0: kotlin.Int, p1: kotlin.Int, p2: k
 
 
 
+@kotlin.wasm.WasmImport("aio:plugin/cryptography@2.0.0", "seal")
+internal external fun __wasm_import_seal(p0: kotlin.Int, p1: kotlin.Int, p2: kotlin.Int, p3: kotlin.Int, p4: kotlin.Int): kotlin.Unit
+
+@kotlin.wasm.WasmImport("aio:plugin/cryptography@2.0.0", "open")
+internal external fun __wasm_import_open(p0: kotlin.Int, p1: kotlin.Int, p2: kotlin.Int, p3: kotlin.Int, p4: kotlin.Int): kotlin.Unit
+
+
+
 
 
 @kotlin.wasm.WasmImport("aio:plugin/management@2.0.0", "invoke")

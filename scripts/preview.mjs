@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, realpath } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { dirname, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse, serialize } from 'parse5';
@@ -13,7 +13,7 @@ const assets = await realpath(resolve(root, 'dist/frontend'));
 const port = Number(process.env.PORT || 4191);
 const origin = `http://127.0.0.1:${port}`;
 const ticket = randomBytes(32).toString('hex');
-const child = spawn(resolve(root, 'dev/target/debug/aio-agent-memory-dev'), process.argv.includes('--demo') ? ['--demo'] : [], { cwd: root, env: process.env, stdio: ['pipe', 'pipe', 'inherit'] });
+const child = spawn(resolve(root, 'dev/target/release/aio-agent-memory-dev'), process.argv.includes('--demo') ? ['--demo'] : [], { cwd: root, env: process.env, stdio: ['pipe', 'pipe', 'inherit'] });
 const lines = createInterface({ input: child.stdout });
 const waiting = [];
 let readyResolve, readyReject;
@@ -41,18 +41,32 @@ import {mountBridge} from '/bridge/host.mjs';
 const dispose = mountBridge(document.getElementById('plugin'), async request => {
  const response = await fetch('/invoke', {method:'POST', headers:{'content-type':'application/json','x-aio-ticket':'${ticket}'}, body:JSON.stringify({...request, body:Array.from(request.body)})});
  if (!response.ok) throw new Error(await response.text()); return response.json();
-}); window.addEventListener('pagehide', dispose, {once:true});</script></body></html>`;
+}, {clipboard:true}); window.addEventListener('pagehide', dispose, {once:true});</script></body></html>`;
 const server = createServer(async (request, response) => {
   try {
     if (request.headers.host !== `127.0.0.1:${port}`) { response.writeHead(403).end(); return; }
     const url = new URL(request.url, origin);
+    if (url.pathname === '/broker' && request.method === 'POST') {
+      const expected = process.env.AIO_MEMORY_BRIDGE_TOKEN || '';
+      const supplied = request.headers.authorization?.replace(/^Bearer /, '') || '';
+      if (expected.length < 32 || Buffer.byteLength(expected) !== Buffer.byteLength(supplied) || !timingSafeEqual(Buffer.from(expected),Buffer.from(supplied))) { response.writeHead(401).end(); return; }
+      let size=0; const chunks=[];
+      for await (const chunk of request) { size+=chunk.length; if(size>512000) { response.writeHead(413).end(); return; } chunks.push(chunk); }
+      const data=JSON.parse(Buffer.concat(chunks).toString());
+      if(data.tenantId!=='preview' || typeof data.userId!=='string' || !data.userId || data.userId.length>128 || !['GET','POST','PUT','DELETE'].includes(data.method) || typeof data.path!=='string' || !data.path.startsWith('/') || data.path.startsWith('//')) {response.writeHead(403).end();return;}
+      const target=new URL(data.path,origin);
+      const result=await invoke({method:data.method,path:target.pathname,query:target.search.slice(1)||null,body:Array.from(Buffer.from(data.body==null?'':JSON.stringify(data.body))),userId:data.userId,worker:!data.interactive});
+      const body=result.body.length?JSON.parse(Buffer.from(result.body).toString()):null;
+      response.writeHead(200,{'content-type':'application/json','cache-control':'no-store'}).end(JSON.stringify({status:result.status,body})); return;
+    }
     if (url.pathname === '/invoke' && request.method === 'POST') {
       if (request.headers.origin !== origin || request.headers['x-aio-ticket'] !== ticket) { response.writeHead(403).end(); return; }
       let size = 0; const chunks = [];
       for await (const chunk of request) { size += chunk.length; if (size > 3 * 1024 * 1024) { response.writeHead(413).end(); return; } chunks.push(chunk); }
       const data = JSON.parse(Buffer.concat(chunks).toString());
       if (!['GET','POST','PUT','DELETE'].includes(data.method) || typeof data.path !== 'string' || !data.path.startsWith('/') || data.path.startsWith('//') || data.path.length > 2048 || !Array.isArray(data.body) || data.body.length > 512000 || data.body.some(b => !Number.isInteger(b) || b < 0 || b > 255)) { response.writeHead(400).end(); return; }
-      const result = await invoke({ method: data.method, path: data.path, body: data.body });
+      const target=new URL(data.path,origin);
+      const result = await invoke({ method: data.method, path: target.pathname, query: data.query || target.search.slice(1) || null, body: data.body });
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(result)); return;
     }
     if (request.method !== 'GET') { response.writeHead(405).end(); return; }

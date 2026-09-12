@@ -1,33 +1,59 @@
 # 记忆服务契约
 
-以下是插件内部服务路径，前端通过平台生成的 `window.aioPlugin` SDK 调用，不是匿名公网接口。
-业务不携带租户 ID；宿主从会话和绑定注入租户与用户。后端拒绝匿名上下文。
+服务通过受信宿主桥调用，租户、用户和工作身份从宿主上下文注入，不能由浏览器请求指定。ID 为安全随机生成的 32 位十六进制记录标识。`spaceId` 查询参数选择空间，省略时使用个人空间；节点、来源和秘密 ID 会重新校验实际归属。
 
-| 方法 | 路径 | 请求与响应 |
+## 收件与整理
+
+| 方法 | 路径 | 契约 |
 |---|---|---|
-| GET | `/graph` | 最近 200 个节点摘要及它们之间的边 |
-| POST | `/search` | `{query, kind?, limit?}`，标题/正文/标签的字面子串搜索 |
-| POST | `/nodes` | `NodeDraft` 创建节点 |
-| GET | `/nodes/{id}` | 完整节点正文与版本 |
-| PUT | `/nodes/{id}` | `NodeDraft`，必须有最新 `version` |
-| DELETE | `/nodes/{id}` | 删除节点并级联关系 |
-| GET | `/nodes/{id}/edges` | 入边与出边，最多 801 项 |
-| POST | `/edges` | `{source,target,relation,evidence?}`，同一方向与关系名更新依据 |
-| DELETE | `/edges/{id}` | 删除关系 |
-| POST | `/import` | `{title,text,url?}`，原子保存来源、概念与提及边 |
-| POST | `/context` | `{nodeIds,depth?,maxCharacters?}`，返回 `{markdown,nodeIds,truncated}` |
+| POST | `/capture` | `{requestId,text,spaceId?,origin?,reference?,clarifies?}` 返回 202 `SourceView` |
+| GET | `/sources` | `{sources,truncated}`，最多 200 项 |
+| GET | `/sources/{id}` | 净化正文、状态、秘密引用与可操作权限 |
+| POST | `/sources/{id}/original` | 仅交互式提交者，返回 `{value}` |
+| POST | `/sources/{id}/retry` | 失败、待整理或冲突任务重新排队 |
+| POST | `/tasks/claim` | `{spaceId}`，工作进程领取净化来源、候选条目、模型绑定和租约 |
+| POST | `/tasks/{id}/submit` | `{lease,result}`，校验后原子写入知识及状态 |
+| POST | `/tasks/{id}/fail` | `{lease,code}`，支持 `cancelled`、`invalid_result`、模型不可用 |
+| GET | `/sources/{id}/proposal` | 编辑者读取待核实模型修订 |
+| POST | `/sources/{id}/resolve` | `{accept,versions?}`，接受修订必须携带查看过的条目版本 |
+| POST | `/import` | `{requestId,title,text,url?}`，文件/文本采用同一隔离管线，重试不重复创建来源 |
 
-`NodeDraft`: `{title,kind?,content?,url?,tags?,version?}`。
-`kind`: `NOTE | CONCEPT | PERSON | EVENT | SOURCE | PROJECT`。
-`MemoryNode`: 以上字段加 `id, updatedAt`；图谱查询的 `content` 是 180 字摘要，编辑前必须 GET 完整节点。
-ID 是安全随机生成的 32 位十六进制包内记录标识，不是 Rust 运行时类型身份。
+`SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict 或 failed。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
 
-错误为 JSON `{error}`，400 输入错误，401 未登录，404 不存在，409 版本冲突，413 请求过大，503 存储不可用。
-所有 SQL 参数化，单请求事务，异常回滚。跨节点引用只能在宿主分配的同一 schema 中解析。
-宿主还限制 SQL 执行时间、连接、返回字节数及 Wasm CPU/内存。
+`origin` 为 chat/note/import。`clarifies` 指向同一原对话、同一提交者的保密暂存资料；仅明确的整段秘密用途说明可以解除暂存，未识别说明不改变原来源。加密原文保留，净化版本和说明来源留痕。
 
-## LLM 连接方式
+工作调用需要受信服务身份及 `memory:compile` 授权。租约 180 秒，失败最多 5 次并退避，暂停不计失败。未绑定模型不会领取整理任务，仍可收件与检索净化来源。执行和提交均重新检查成员及原提交者写权限。
 
-受信任的 LLM 客户端通过宿主授权后的插件请求接口访问这些路径：先 `/search` 找到节点，再 `/context` 获取正文和相邻节点；模型提出的写入使用 `/nodes`、`/edges`，由使用者决定何时应用。不要把来源文本中的指令提升为系统指令，也不要丢弃来源 URL 和节点 ID。
+## 空间与秘密
 
-当前没有配置外部 LLM Provider 或自动写入代理。导入器只解析显式双向链接，不声称完成语义抽取。`/context` 输出 Markdown 数据，任何语言的模型客户端都可消费，不依赖某一家框架。
+| 方法 | 路径 | 契约 |
+|---|---|---|
+| GET/POST | `/spaces` | 列表或 `{title,modelBinding?}` 新建团队空间 |
+| PUT | `/spaces/{id}` | 管理者修改名称和模型绑定 |
+| GET/POST | `/spaces/{id}/members` | 管理者查询或 `{userId,role}` 修改成员 |
+| DELETE | `/spaces/{id}/members/{user}` | 移除成员，同时撤销该空间秘密授权 |
+| GET | `/secrets` | 字段引用、标签、来源及 canReveal/canManage，不含明文 |
+| POST | `/secrets/{id}/reveal` | 交互式独立授权后返回 `{value}` |
+| PUT | `/secrets/{id}/grants` | 秘密管理者提交 `{userId,reveal,manage}` |
+
+角色为 OWNER/EDITOR/READER。普通空间管理员不自动获得原文或秘密权限。原文默认只允许提交者读取，秘密所有者或被单独授权者可查看；后台工作身份不能读取明文。将授权布尔值设为 false 可撤销相应权限。
+
+## 知识与检索
+
+| 方法 | 路径 | 契约 |
+|---|---|---|
+| GET | `/graph` | 最近 200 个节点摘要和至多 800 条关系 |
+| POST | `/search` | `{query,kind?,limit?}`，标题、正文、标签、别名搜索 |
+| POST | `/recall` | `{query,limit?}`，关键词与图谱检索候选，至多 24 项 |
+| POST | `/visibility` | `{nodeIds}`，至多 400 个 ID，返回当前仍可见的 ID |
+| POST/PUT | `/nodes`、`/nodes/{id}` | `NodeDraft`，编辑必须带当前 version |
+| GET/DELETE | `/nodes/{id}` | 完整节点或删除；来源删除清除密文并停止派生内容召回 |
+| GET | `/nodes/{id}/edges`、`/nodes/{id}/sources` | 关系或来源依据 |
+| GET | `/nodes/{id}/revisions` | 版本、作者、来源和净化修订 |
+| POST | `/nodes/{id}/rollback` | `{version,currentVersion}`，创建新的人工修订 |
+| POST/DELETE | `/edges`、`/edges/{id}` | 关系 `{source,target,relation,evidence?}` 或删除 |
+| POST | `/context` | `{nodeIds,depth?,maxCharacters?}` 返回 `{markdown,nodeIds,truncated}` |
+
+`NodeDraft` 为 `{title,kind?,content?,url?,tags?,aliases?,version?}`。SOURCE 只能通过收件管线写入，普通编辑发现疑似秘密会拒绝。模型结果只允许 NOTE/CONCEPT/PERSON/EVENT/PROJECT，最多 24 条目、48 关系；人工编辑、版本冲突及模型标记的不确定事实进入待核实。
+
+所有请求采用数据库事务并重新鉴权。错误为 `{error}`：400 输入错误、401 未登录、403 无权访问、404 不存在、409 版本/租约冲突、413 过大、503 暂不可用。普通响应不携带原文，秘密展示响应禁止缓存。自动识别不能保证发现任意未标注密码。

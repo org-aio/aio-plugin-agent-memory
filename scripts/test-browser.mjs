@@ -9,12 +9,13 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const reports = [];
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const viewState = new WeakMap();
 async function click(locator) { await locator.waitFor(); await pause(250); await locator.click({ force: true }); await pause(150); }
 function responseFor(page, method, path) {
   const promise = page.waitForResponse(response => {
     if (new URL(response.url()).pathname !== '/invoke') return false;
     const input = response.request().postDataJSON();
-    return input?.method === method && input.path === path;
+    return input?.method === method && new URL(input.path,'http://local').pathname === path;
   }, { timeout: 30000 });
   promise.catch(() => {}); return promise;
 }
@@ -26,24 +27,37 @@ async function payload(response, status = 200) {
 }
 async function reload(page) {
   const pending = responseFor(page, 'GET', '/graph');
-  await page.goto(url); const graph = await payload(await pending); await pause(700); return graph;
+  await page.goto(url); const graph = await payload(await pending); await pause(700);
+  viewState.set(page,{label:'Wiki',point:null});return graph;
 }
 async function typeInto(page, locator, value) {
   await click(locator); await page.keyboard.press('Meta+A'); await page.keyboard.insertText(value); await pause(150);
 }
 async function select(page, frame, title, id) {
-  await click(frame.getByRole('button', { name: '列表', exact: true }));
+  await view(frame,'Wiki');
   const node = responseFor(page, 'GET', `/nodes/${id}`);
   const edges = responseFor(page, 'GET', `/nodes/${id}/edges`);
   await click(frame.getByText(title, { exact: false }).first());
   await payload(await node); await payload(await edges); await pause(300);
+}
+async function view(frame,label) {
+  const page=frame.locator('body').page();
+  const current=viewState.get(page);
+  if(current.label===label) return;
+  if(!current.point) {
+    const bounds=await frame.getByRole('button',{name:current.label,exact:true}).boundingBox();
+    assert(bounds);current.point={x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2};
+  }
+  await page.mouse.click(current.point.x,current.point.y);await pause(250);
+  await click(frame.getByText(label,{exact:true}).last());
+  current.label=label;
 }
 async function sdk(frame, method, path, body) {
   return frame.locator('body').evaluate((_, input) => window.aioPlugin.json(input.method, input.path, input.body), { method, path, body });
 }
 try {
   for (const [name, viewport] of [['desktop', { width: 1440, height: 960 }], ['mobile', { width: 390, height: 844 }]]) {
-    const context = await browser.newContext({ viewport });
+    const context = await browser.newContext({ viewport,permissions:['clipboard-read','clipboard-write'] });
     const page = await context.newPage();
     const errors = [], requests = [], external = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -60,13 +74,22 @@ try {
       const canvas = frame.locator('canvas').first();
       await canvas.waitFor();
       const points = {};
-      for (const label of ['列表', '图谱', '新建记忆', '导入来源', '刷新']) {
+      for (const label of ['新建记忆', '导入来源', '导出上下文', '刷新']) {
         const bounds = await frame.getByRole('button', { name: label, exact: true }).boundingBox();
         assert(bounds, `Missing control ${label}`);
         points[label] = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
       }
-      const pointer = async label => { await page.mouse.click(points[label].x, points[label].y); await pause(300); };
-      await click(frame.getByRole('button', { name: '暂停布局', exact: true }));
+      const pointer = async label => {
+        if(label==='列表' || label==='图谱') return view(frame,label==='列表'?'Wiki':'图谱');
+        await page.mouse.click(points[label].x, points[label].y); await pause(300);
+      };
+      await view(frame,'图谱');
+      const pauseButton=frame.getByRole('button', { name: '暂停布局', exact: true });
+      if(await pauseButton.isVisible()) await click(pauseButton);
+      else {
+        // Compose beta 切换视图后缺失语义节点，位置由已校准的工具栏和固定图谱宽度决定。
+        await page.mouse.click(viewport.width-(name==='desktop'?428:28),viewState.get(page).point.y);
+      }
       await pause(300);
       const before = PNG.sync.read(await page.screenshot());
       const colors = new Set();
@@ -143,24 +166,39 @@ try {
       if (name === 'desktop') {
         const filename = `source-${Date.now()}`;
         const concept = `Concept-${Date.now()}`;
+        const canary = `import-canary-${Date.now()}`;
         await click(frame.getByRole('button', { name: '导入来源', exact: true }));
         const chooser = page.waitForEvent('filechooser');
         await click(frame.getByRole('button', { name: '选择 Markdown / 文本文件', exact: true }));
-        await (await chooser).setFiles({ name: `${filename}.md`, mimeType: 'text/markdown', buffer: Buffer.from(`# Source\n\n[[${concept}]] retains evidence.`) });
+        await (await chooser).setFiles({ name: `${filename}.md`, mimeType: 'text/markdown', buffer: Buffer.from(`# Source\n\n[[${concept}]] retains evidence.\npassword: ${canary}`) });
         await pause(200);
         const imported = responseFor(page, 'POST', '/import');
         await click(frame.getByRole('button', { name: '导入', exact: true }));
         const result = await payload(await imported, 201); cleanup.push(result.source.id);
         assert.equal(result.linkedNodes, 1);
-        await pause(300); const graph = await reload(page);
-        cleanup.push(graph.nodes.find(n => n.title === concept).id);
-        await select(page, frame, filename, result.source.id);
+        assert(!JSON.stringify(result).includes(canary));
+        await pause(300);
         const exported = responseFor(page, 'POST', '/context');
-        await click(frame.getByRole('button', { name: '导出上下文', exact: true }).last());
+        await pointer('导出上下文');
         const text = await payload(await exported);
-        assert(text.markdown.includes(concept)); assert(text.nodeIds.includes(result.source.id));
+        assert(text.markdown.includes(concept)); assert(text.nodeIds.includes(result.source.id));assert(!text.markdown.includes(canary));
         await page.screenshot({ path: `${output}/desktop-context.png` });
         await click(frame.getByRole('button', { name: '关闭', exact: true }));
+        const graph = await reload(page);
+        cleanup.push(graph.nodes.find(n => n.title === concept).id);
+        await view(frame,'来源');
+        const reading=responseFor(page,'GET',`/sources/${result.source.id}`);
+        const sourceRow=frame.getByText(filename,{exact:true}).first();
+        if(await sourceRow.isVisible()) await click(sourceRow);
+        else {await page.mouse.click(140,viewState.get(page).point.y+64);await pause(250);}
+        const source=await payload(await reading);
+        const revealing=responseFor(page,'POST',`/secrets/${source.secrets[0].id}/reveal`);
+        await click(frame.getByRole('button',{name:'查看秘密',exact:true}));
+        assert.equal((await payload(await revealing)).value,canary);
+        await page.screenshot({path:`${output}/desktop-credential.png`});
+        await click(frame.getByRole('button',{name:'复制秘密',exact:true}));
+        assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),canary);
+        await click(frame.getByRole('button',{name:'关闭',exact:true}).last());
       }
       await reload(page);
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
