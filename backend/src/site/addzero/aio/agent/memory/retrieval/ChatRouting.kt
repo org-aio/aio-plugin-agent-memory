@@ -31,7 +31,10 @@ internal fun MemoryStore.route(source: SourceView): ChatRoute {
             if (matched.isEmpty()) "当前空间没有找到相关资料。"
             else
                 "找到 ${matched.size} 条相关资料：\n\n" +
-                    recalled.nodes.joinToString("\n\n") { "${it.title}\n${it.content}" }
+                    recalled.nodes.joinToString("\n\n") {
+                        "${it.title}\n${it.content}"
+                            .replace(Regex("\\[\\[secret:[a-f0-9]{32}]]"), "[保密字段]")
+                    }
         return ChatRoute(
             "recall",
             reply,
