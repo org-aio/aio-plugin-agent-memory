@@ -2,7 +2,7 @@
 
 仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`；Kotlin 命名空间为 `site.addzero.aio.agent.memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
 
-Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔离和持久整理队列属于 Memory，模型请求由 Agent 常驻服务执行；正式宿主的联合安装和生命周期尚待接入。
+Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔离和持久整理队列属于 Memory，模型请求由 Agent 的 Pi 常驻服务执行；正式 AIO 宿主管理父子安装、持久激活和跨插件授权，界面沿用 Compose。
 
 独立的全栈记忆插件：真实 Compose 图谱界面 + Kotlin Wasm Component 后端 + PostgreSQL。
 前后端、模型、迁移以一个包发布和回滚，没有 JVM，也没有宿主预设控件协议。
@@ -80,7 +80,9 @@ npm run test:browser
 ## 发布边界
 
 包清单是 `aio-plugin.toml`，运行时元数据由 Component `describe` 导出，页面入口为 `index.html`。
-**仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力与 v2 整包安装的宿主。平台运行库已实现持久绑定和激活，当前公网壳尚未接入，不能上传到旧运行时冒充已部署。**
+**仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
+
+进入“工作空间 → 智能体”即可对话收件和查看本轮激活图谱；独立记忆工作台位于“社区插件 → 智能体 → 记忆图谱”。模型未配置时继续保存加密资料并支持本地检索，wiki 整理等待空间绑定可用模型。生产发布与数据库副本验收记录见 [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md)。
 本仓库 `dev/` 依赖相邻平台工作区的 v2 crates，平台至少需要包含提交 `01f8fc4`（持久绑定、加密、激活和受控约束迁移）；旧版平台不能运行该验收工具。
 
 前端包含本地 Noto Sans CJK 字体及 OFL 许可证，加载不需要公网字体/CDN。数据库按插件与租户独立 schema/角色隔离；单次图谱最多 200 节点、800 边，上下文最多 24 节点，截断会显式返回。正式数据备份与 schema 兼容回滚由宿主管理，卸载不应默认删除业务数据。
