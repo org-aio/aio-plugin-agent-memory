@@ -1,6 +1,6 @@
 {
   "git": "https://github.com/zjarlin/az-compose.git",
-  "revision": "e648885b6c8a2c1a475fa3d396a4b979e538c1f1",
+  "revision": "87e7507147c508a41637f4ae1577a172f890a7f7",
   "root": "src/commonMain/kotlin/site/addzero/component/knowledge_graph",
   "files": [
     "GraphSearchTraversal.kt", "NodeState.kt", "model/GraphData.kt",
