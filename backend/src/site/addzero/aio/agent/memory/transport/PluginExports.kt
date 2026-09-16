@@ -28,7 +28,7 @@ internal object PluginRootFunctionsExportsImpl : PluginRootFunctions.Exports {
                     "记忆图谱",
                     "index.html",
                     Metadata.Scene("workspace", "工作空间"),
-                    emptyList(),
+                    listOf("智能体"),
                     null,
                     Metadata.Surface.WORKSPACE,
                 )
