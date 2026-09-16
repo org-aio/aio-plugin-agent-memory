@@ -1,5 +1,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,7 +10,7 @@ const lock = JSON.parse(readFileSync(join(root, 'graph/source.lock.json'), 'utf8
 if (!/^[a-f0-9]{40}$/.test(lock.revision)) throw new Error('Graph revision must be a complete Git SHA');
 let repo = process.env.AIO_GRAPH_SOURCE;
 if (!repo) {
-  repo = join(root, 'build/graph-source');
+  repo = join(homedir(), '.cache/aio/sources', createHash('sha256').update(lock.git).digest('hex'));
   mkdirSync(repo, { recursive: true });
   execFileSync('git', ['init', '-q', repo]);
   try { execFileSync('git', ['-C', repo, 'cat-file', '-e', `${lock.revision}^{commit}`], { stdio: 'ignore' }); }
