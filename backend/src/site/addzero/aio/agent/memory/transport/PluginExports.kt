@@ -27,8 +27,8 @@ internal object PluginRootFunctionsExportsImpl : PluginRootFunctions.Exports {
                     "agent-memory",
                     "记忆图谱",
                     "index.html",
-                    Metadata.Scene("community", "社区插件"),
-                    listOf("智能体"),
+                    Metadata.Scene("workspace", "工作空间"),
+                    emptyList(),
                     null,
                     Metadata.Surface.WORKSPACE,
                 )
