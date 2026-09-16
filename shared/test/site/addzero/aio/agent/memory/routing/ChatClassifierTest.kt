@@ -4,6 +4,15 @@ import kotlin.test.*
 
 class ChatClassifierTest {
     @Test
+    fun onlyStandaloneGreetingsSkipKnowledgeWork() {
+        for (input in listOf("hi", " Hi! ", "HELLO", "你好！", "在吗？"))
+            assertEquals(ChatIntent.GREETING, ChatClassifier.classify(input).intent, input)
+        val ref = "[[secret:${"a".repeat(32)}]]"
+        for (input in listOf("你好，我的生日是六月二日", "hi\n$ref", "hi $ref", "早上好，记住周五开会", "记住：hi", "生日：六月二日", "hi 项目"))
+            assertNotEquals(ChatIntent.GREETING, ChatClassifier.classify(input).intent, input)
+    }
+
+    @Test
     fun explicitLookupExtractsSubject() {
         for ((input, expected) in
             listOf(

@@ -10,6 +10,8 @@ internal fun MemoryStore.route(source: SourceView): ChatRoute {
     if (source.status == "quarantined")
         return ChatRoute("quarantined", "已收下，资料已保密暂存。可以在这里补充这段资料的字段用途。")
     val decision = ChatClassifier.classify(source.text)
+    if (decision.intent == ChatIntent.GREETING)
+        return ChatRoute("greeting", "你好！可以直接发资料让我记住，也可以问我之前记录的内容。")
     if (decision.intent == ChatIntent.SAVE)
         return ChatRoute(
             "save",

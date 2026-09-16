@@ -79,6 +79,8 @@ npm run test:browser
 
 ## 发布边界
 
+`aio-delivery.toml` 声明官方自动构建配方：使用 fullstack 环境执行 `scripts/build.sh`。默认分支推送后，正式宿主按官方发布账号发现、构建并上架，已有安装沿用原数据库绑定。
+
 包清单是 `aio-plugin.toml`，运行时元数据由 Component `describe` 导出，页面入口为 `index.html`。
 **仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
 

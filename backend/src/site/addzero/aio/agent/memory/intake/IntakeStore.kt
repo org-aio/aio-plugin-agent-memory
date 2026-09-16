@@ -36,12 +36,13 @@ internal class IntakeStore(private val db: DatabaseSession, private val access: 
         val store = MemoryStore(db, access, space.id)
         val title = if (isolated.quarantined) "待整理的保密资料" else sourceTitle(isolated.text)
         val node = store.save(NodeDraft(title, NodeKind.SOURCE, isolated.text), author = "source")
-        val lookup =
-            !isolated.quarantined &&
-                request.origin == "chat" &&
-                ChatClassifier.classify(isolated.text).intent == ChatIntent.RECALL
+        val intent =
+            if (!isolated.quarantined && request.origin == "chat")
+                ChatClassifier.classify(isolated.text).intent
+            else null
+        val conversationOnly = intent == ChatIntent.RECALL || intent == ChatIntent.GREETING
         val status =
-            if (isolated.quarantined) "quarantined" else if (lookup) "recorded" else "pending"
+            if (isolated.quarantined) "quarantined" else if (conversationOnly) "recorded" else "pending"
         db.execute(
             "INSERT INTO plugin_memory_sources(id,space_id,created_by,request_id,ciphertext,status,origin,reference,updated_at) VALUES(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9)",
             listOf(
@@ -69,7 +70,7 @@ internal class IntakeStore(private val db: DatabaseSession, private val access: 
                 ),
             )
         }
-        if (!isolated.quarantined && !lookup) {
+        if (!isolated.quarantined && !conversationOnly) {
             db.execute(
                 "INSERT INTO plugin_memory_tasks(id,space_id,actor_id,state,available_at) VALUES(\$1,\$2,\$3,'pending',\$4)",
                 listOf(text(node.id), text(space.id), text(access.user), number(db.now())),

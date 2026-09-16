@@ -5,6 +5,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 object ChatClassifier {
+    private val greetings by lazy {
+        setOf("hi", "hello", "hey", "你好", "您好", "嗨", "哈喽", "在吗", "早上好", "下午好", "晚上好")
+    }
     private val complex by lazy {
         Regex(
             "分析|比较|对比|总结|归纳|解释|为什么|为何|怎么|如何|建议|规划|设计|推理|翻译|生成|撰写|编写|" +
@@ -29,6 +32,9 @@ object ChatClassifier {
 
     fun classify(sanitized: String): RoutingDecision {
         val text = sanitized.trim()
+        // 只匹配完整问候；不能先去掉秘密引用，否则混合凭据会被误判为闲聊。
+        if (asciiLower(text).trimEnd('!', '！', '?', '？', '.', '。', '~', '～') in greetings)
+            return RoutingDecision(ChatIntent.GREETING, text)
         val question = text.replace(secretReference, "").trim()
         val comparable = asciiLower(question)
         if (complex.containsMatchIn(comparable)) return RoutingDecision(ChatIntent.MODEL, question)

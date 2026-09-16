@@ -3,6 +3,7 @@ package site.addzero.aio.agent.memory.routing
 import kotlinx.serialization.Serializable
 
 enum class ChatIntent {
+    GREETING,
     SAVE,
     RECALL,
     MODEL,
