@@ -1,13 +1,19 @@
-# 智能体记忆
+# 智能体记忆 / AIO Agent Memory
 
 仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`；Kotlin 命名空间为 `site.addzero.aio.agent.memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
 
+Repository: `aio-plugin-agent-memory`; parent plugin: `aio-plugin-agent`. Sub-plugins use the `aio-plugin-<parent-feature>-<sub-feature>` naming; this feature is `memory`, with Kotlin namespace `site.addzero.aio.agent.memory`. The repository, release source and page identity are not Rust runtime type identity.
+
 Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔离和持久整理队列属于 Memory，模型请求由 Agent 的 Pi 常驻服务执行；正式 AIO 宿主管理父子安装、持久激活和跨插件授权，界面沿用 Compose。
+
+Agent conversations call this plugin through the trusted bridge. Sources, space permissions, secret isolation and the persistent organization queue belong to Memory; model requests are executed by the Agent's Pi resident service. A production AIO host manages parent/child installation, persistent activation and cross-plugin authorization; the UI stays in Compose.
 
 独立的全栈记忆插件：真实 Compose 图谱界面 + Kotlin Wasm Component 后端 + PostgreSQL。
 前后端、模型、迁移以一个包发布和回滚，没有 JVM，也没有宿主预设控件协议。
 
-## 功能
+A standalone full-stack memory plugin: a real Compose graph UI + Kotlin Wasm Component backend + PostgreSQL. Frontend, backend, models and migrations publish and roll back as one package — no JVM, and no host-preset widget protocol.
+
+## 功能 / Features
 
 - 笔记、概念、人物、事件、来源、项目统一为节点，正文保留 Markdown，标签用 JSONB 保存。
 - 有方向的关系、关系依据、双向关联与一层邻域；删除节点级联删除关系，操作前确认。
@@ -22,9 +28,24 @@ Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔�
 - 共享层提供无模型的保守对话分类器，明确查找直接召回净化摘录，保存仅排后台整理，复杂或不明确输入交给 Agent 模型。查找来源标为 recorded，保留加密原文和对话依据，不进入普通图谱、检索或 wiki 整理队列。
 - `/route` 返回本轮直接命中与上下文节点，`/activation` 提供优先包含激活邻域的受控图谱，供 Agent 聊天联动使用。
 
+- Notes, concepts, people, events, sources and projects are unified as nodes; bodies keep Markdown, and tags are stored as JSONB.
+- Directed relations, relation evidence, bidirectional links and a one-hop neighborhood; deleting a node cascades its relations, with confirmation before the operation.
+- Import Markdown/text files or paste bodies; explicit `[[标题]]` generates concept nodes and “提及” (mentions) edges.
+- Search over titles, bodies and tags; local graph filtering, drag, pan, zoom, pause and list switching.
+- Context retrieval expands along 0 to 3 hops of relations and returns bodies, source URLs, node IDs and relations, ready for LLM clients.
+- Edits reject stale overwrites with version numbers; imports and relation writes happen in transactions.
+- Conversations, quick notes and imports share the same secret-isolation rules, keeping three layers — encrypted originals, sanitized sources and wiki — with passwords and tokens replaced by unguessable references in separate encrypted fields. Material suspected of containing secrets but not reliably splittable is held in secure quarantine.
+- Personal/team spaces, manager/editor/reader roles, submitter original-text permissions and separate secret authorization. Worker processes cannot call original-text or secret-display interfaces.
+- Persistent leases, backoff retries, preemption pauses, model binding, wiki auto-revision, aliases, source-version evidence, pending conflicts and history rollback. Model submission and task state commit in one transaction; expired or duplicate leases never regenerate knowledge.
+- The workbench provides Wiki, Graph, Sources, Credentials and Pending-Organization views; the original conversation can add explicit notes such as “上一条是密码” (the previous message is a password) to keep treating an entire quarantined passage as a secret.
+- The shared layer provides a model-free conservative conversation classifier: explicit lookups directly recall sanitized excerpts, saves only queue background organization, and complex or ambiguous input goes to the Agent model. Lookup sources are marked `recorded`, keeping encrypted originals and conversation evidence without entering normal graph, retrieval or wiki-organization queues.
+- `/route` returns this turn's direct hits and context nodes; `/activation` provides a controlled graph that preferentially includes the activation neighborhood, for Agent chat integration.
+
 这里不内置 LLM 服务商或密钥，模型配置由 Agent 提供。检索覆盖标题、别名、正文和图谱邻域，包括尚未完成 wiki 整理的净化资料；没有向量服务依赖。用户内容始终作为资料，不能改变宿主或模型系统规则。任意未标注密码无法保证被自动识别，凭据自动调用外部服务不在此版范围。
 
-## 结构
+No LLM provider or key is bundled here; model configuration is provided by the Agent. Retrieval covers titles, aliases, bodies and graph neighborhoods, including sanitized material not yet wiki-organized; there is no vector-service dependency. User content is always treated as data and cannot change host or model system rules. Arbitrary unmarked passwords are not guaranteed to be auto-recognized, and automatically calling external services with credentials is out of scope for this version.
+
+## 结构 / Structure
 
 ```text
 frontend/    Compose wasmJs 界面、图谱适配、编辑 Dialog
@@ -36,9 +57,21 @@ scripts/     作者侧构建、预览、浏览器测试
 examples/    可选的演示来源文档
 ```
 
-## 构建
+```text
+frontend/    Compose wasmJs UI, graph adapter, edit dialogs
+backend/     Kotlin Component, database transactions, retrieval, SQL migrations
+shared/      UI-free models and validation rules
+graph/       pinned source dependency of the az-compose graph component
+dev/         AIO v2 runner for development/acceptance only, not part of the plugin package
+scripts/     author-side build, preview, browser tests
+examples/    optional demo source documents
+```
+
+## 构建 / Build
 
 构建插件需要 Node.js 22+ 与 `wasm-tools`，开发运行器另需 Rust 和相邻的 AIO v2 平台工作区。Kotlin wrapper 固定为 0.12.0-dev-4233 并校验分发摘要，编译器为 2.4.10，Compose 为 1.12.0-beta03。
+
+Building the plugin requires Node.js 22+ and `wasm-tools`; the dev runner additionally needs Rust and the adjacent AIO v2 platform workspace. The Kotlin wrapper is pinned to 0.12.0-dev-4233 with its distribution checksum verified; the compiler is 2.4.10 and Compose is 1.12.0-beta03.
 
 ```sh
 npm ci --ignore-scripts
@@ -50,17 +83,25 @@ cargo build --locked --release --manifest-path dev/Cargo.toml
 
 `graph/source.lock.json` 固定 `az-compose` 的 Git SHA。构建时读取该提交的通用图谱文件，不维护组件源码副本；可设置 `AIO_GRAPH_SOURCE` 使用已有本地 Git 缓存。`--working-tree` 只用于组件联调，发布必须用锁定提交重新构建。
 
+`graph/source.lock.json` pins the Git SHA of `az-compose`. The build reads the shared graph files at that commit and keeps no component source copy; `AIO_GRAPH_SOURCE` can point to an existing local Git cache. `--working-tree` is only for component integration; releases must rebuild from the locked commit.
+
 **图谱上游 `az-compose` 当前为私有仓库，构建需要它的只读访问权限。** 本机可使用 `AIO_GRAPH_SOURCE=../kmp-aio/lib/compose/az-compose npm run build`；该方式仍按锁定提交读取，不会带入未提交改动。公开插件仓库不包含该私有源码。GitHub CI 目前缺少上游只读权限，完整构建尚未通过；不要把个人令牌提交到代码或为解决构建擅自改变上游可见性。
 
+**The graph upstream `az-compose` is currently a private repository; building requires read-only access to it.** Locally you can use `AIO_GRAPH_SOURCE=../kmp-aio/lib/compose/az-compose npm run build`; that path still reads the locked commit and brings in no uncommitted changes. The public plugin repository does not contain that private source. GitHub CI currently lacks upstream read-only access, so a full build has not passed there; never commit personal tokens, and never change upstream visibility unilaterally to fix a build.
+
 WIT 绑定来自 `aio-platform/lib/plugin/contract/wit/plugin.wit`。`backend/contract/` 保存逐字复制、摘要锁定的 SDK 契约快照，使插件可以独立构建；不是另一个自定义协议。设置 `AIO_PLATFORM` 时还会检查平台契约是否一致。使用 Kotlin 官方 `wit-bindgen` 分支提交 `700f2db5e1d01f7bee8d756750c6f631171f520e` 生成：
+
+WIT bindings come from `aio-platform/lib/plugin/contract/wit/plugin.wit`. `backend/contract/` keeps verbatim, digest-locked snapshots of the SDK contract so the plugin can build independently; it is not another custom protocol. When `AIO_PLATFORM` is set, the platform contract is also checked for consistency. Bindings are generated with the Kotlin official `wit-bindgen` branch commit `700f2db5e1d01f7bee8d756750c6f631171f520e`:
 
 ```sh
 WIT_BINDGEN=/path/to/wit-bindgen sh scripts/generate-bindings.sh
 ```
 
-## 本地预览与验收
+## 本地预览与验收 / Local Preview & Acceptance
 
 准备一个**独立的开发 PostgreSQL 数据库**。AIO v2 provisioner 需要管理员连接创建最小权限角色，并要求撤销该数据库 public schema 的 PUBLIC 权限。不要对现有业务数据库直接执行这一变更。
+
+Prepare a **dedicated development PostgreSQL database**. The AIO v2 provisioner needs an admin connection to create a least-privilege role and requires revoking PUBLIC privileges on that database's public schema. Do not run this change against an existing business database.
 
 ```sql
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -75,18 +116,35 @@ npm run test:browser
 
 默认地址 `http://127.0.0.1:4191/`，`PORT` 可覆盖。开发运行器在忽略提交的 `.local/memory-host.json` 保存稳定来源 UUID 和宿主密钥，以平台持久绑定恢复同一数据库角色和 schema；`AIO_MEMORY_DEV_DIRECTORY` 可选择另一个目录。只有 `--verify` 使用独立临时来源，`--demo` 才导入演示资料。必须一并保留数据库和密钥文件。
 
+The default address is `http://127.0.0.1:4191/`; `PORT` overrides it. The dev runner stores a stable source UUID and host key in the git-ignored `.local/memory-host.json` and restores the same database role and schema through the platform's persistent binding; `AIO_MEMORY_DEV_DIRECTORY` selects another directory. Only `--verify` uses an isolated temporary source, and only `--demo` imports demo material. The database and key file must be kept together.
+
 预览只监听 loopback，以随机挂载票据校验请求，用平台原版 v2 通信桥和沙箱 iframe。数据库凭据只存在于开发宿主进程，前端和 Wasm 都拿不到。图谱选择先更新本地状态，随后读取该节点完整正文；拖动、缩放、布局和视图切换不发请求。
 
-## 发布边界
+The preview listens on loopback only, validates requests with random mount tickets, and uses the platform's original v2 bridge and sandboxed iframes. Database credentials exist only in the dev host process — neither the frontend nor Wasm can reach them. Selecting a graph node first updates local state, then reads that node's full body; drag, zoom, layout and view switching make no requests.
+
+## 发布边界 / Release Boundaries
 
 `aio-delivery.toml` 声明官方自动构建配方：使用 fullstack 环境执行 `scripts/build.sh`。默认分支推送后，正式宿主按官方发布账号发现、构建并上架，已有安装沿用原数据库绑定。
+
+`aio-delivery.toml` declares the official auto-build recipe: run `scripts/build.sh` in the fullstack environment. After a default-branch push, the production host discovers, builds and publishes through the official release account; existing installs keep their original database bindings.
 
 包清单是 `aio-plugin.toml`，运行时元数据由 Component `describe` 导出，页面入口为 `index.html`。
 **仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
 
+The package manifest is `aio-plugin.toml`; runtime metadata is exported by the Component `describe` and the page entry is `index.html`. **Only hosts supporting `aio:plugin@2.0.0`, database, encryption capabilities and v2 whole-package install are accepted. In the production AIO marketplace, enable the parent plugin “智能体” (Agent) first, then install “智能体记忆” (Agent Memory); the parent plugin needs the host's v2 process execution capability.**
+
 进入“工作空间 → 智能体”即可对话收件和查看本轮激活图谱；独立记忆工作台位于“工作空间 → 记忆图谱”。模型未配置时继续保存加密资料并支持本地检索，wiki 整理等待空间绑定可用模型。生产发布与数据库副本验收记录见 [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md)。
+
+Open “工作空间 → 智能体” (Workspace → Agent) to converse and view this turn's activated graph; the standalone memory workbench is at “工作空间 → 记忆图谱” (Workspace → Memory Graph). When no model is configured, encrypted material still saves and local retrieval works; wiki organization waits for a usable model bound to the space. Production release and database-replica acceptance records are in the [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md) (AIO host deployment doc).
+
 本仓库 `dev/` 依赖相邻平台工作区的 v2 crates，平台至少需要包含提交 `01f8fc4`（持久绑定、加密、激活和受控约束迁移）；旧版平台不能运行该验收工具。
+
+This repository's `dev/` depends on the v2 crates of the neighboring platform workspace; the platform must at least include commit `01f8fc4` (persistent binding, encryption, activation and controlled-constraint migrations). Older platforms cannot run this acceptance tool.
 
 前端包含本地 Noto Sans CJK 字体及 OFL 许可证，加载不需要公网字体/CDN。数据库按插件与租户独立 schema/角色隔离；单次图谱最多 200 节点、800 边，上下文最多 24 节点，截断会显式返回。正式数据备份与 schema 兼容回滚由宿主管理，卸载不应默认删除业务数据。
 
+The frontend bundles a local Noto Sans CJK font with its OFL license, so loading needs no public font/CDN. The database is isolated per plugin and tenant by schema/role; a single graph caps at 200 nodes and 800 edges, context at 24 nodes, with truncation returned explicitly. Production data backups and schema-compatible rollback are managed by the host; uninstall should not delete business data by default.
+
 接口与限制见 [服务契约](docs/service.md)。
+
+Interface and limits are documented in [服务契约](docs/service.md) (service contract).
