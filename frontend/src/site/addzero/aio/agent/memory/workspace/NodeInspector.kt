@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import site.addzero.aio.agent.memory.model.NodeKind
+import site.addzero.aio.agent.memory.model.fields
 
 @Composable
 internal fun NodeInspector(state: MemoryState) {
@@ -45,22 +47,28 @@ internal fun NodeInspector(state: MemoryState) {
             Tool("关闭详情", Icons.Default.Close) { state.closeDetail() }
         }
         Text(node.title, style = MaterialTheme.typography.titleLarge)
-        if (node.kind == site.addzero.aio.agent.memory.model.NodeKind.SOURCE) {
+        if (node.kind == NodeKind.SOURCE) {
             TextButton(onClick = { state.openSource(node.id) }) { Text("打开来源与凭据") }
         }
         if (state.loadingDetail) LinearProgressIndicator(Modifier.fillMaxWidth())
-        SelectionContainer {
-            Text(node.content.ifBlank { "暂无正文" }, style = MaterialTheme.typography.bodyMedium)
-        }
-        if (node.tags.isNotEmpty())
-            Text(
-                node.tags.joinToString("  ") { "#$it" },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        if (node.url.isNotEmpty()) {
-            Text("来源", style = MaterialTheme.typography.labelLarge)
-            SelectionContainer { Text(node.url, style = MaterialTheme.typography.bodySmall) }
+        // 字段按节点类型给出：笔记重正文，概念重定义与别名，人物重简介，事件重经过，
+        // 项目重范围，来源重摘要与凭据入口。
+        node.fields().forEach { field ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    field.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SelectionContainer {
+                    Text(
+                        field.value,
+                        style =
+                            if (field.multiline) MaterialTheme.typography.bodyMedium
+                            else MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
         HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -107,7 +115,7 @@ internal fun NodeInspector(state: MemoryState) {
                 state.focused = !state.focused
                 if (state.focused) {
                     state.query = ""
-                    state.kind = null
+                    state.setKind(null)
                 }
             }
         ) {

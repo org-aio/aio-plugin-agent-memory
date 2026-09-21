@@ -206,7 +206,7 @@ private fun Header(state: MemoryState, compact: Boolean) {
         ) {
             OutlinedTextField(
                 state.query,
-                { state.query = it },
+                { state.setQuery(it) },
                 Modifier.weight(1f),
                 singleLine = true,
                 placeholder = { Text("搜索记忆") },
@@ -240,7 +240,7 @@ private fun GraphToolbar(state: MemoryState, compact: Boolean) {
                 DropdownMenuItem(
                     text = { Text("全部类型") },
                     onClick = {
-                        state.kind = null
+                        state.setKind(null)
                         menu = false
                     },
                 )
@@ -249,7 +249,7 @@ private fun GraphToolbar(state: MemoryState, compact: Boolean) {
                         text = { Text(kind.label) },
                         leadingIcon = { Icon(Icons.Default.Star, null, tint = kind.color()) },
                         onClick = {
-                            state.kind = kind
+                            state.setKind(kind)
                             menu = false
                         },
                     )

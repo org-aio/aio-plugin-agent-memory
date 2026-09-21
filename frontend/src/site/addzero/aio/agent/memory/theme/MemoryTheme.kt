@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -24,6 +23,8 @@ private fun typography(font: FontFamily?): Typography {
 
 @Composable
 internal fun MemoryTheme(content: @Composable () -> Unit) {
+    // 字体是可选增强：界面先用系统字体立即渲染，字体就绪后再切换。
+    // 不能把 content 挡在字体加载之后，否则字体失败或缓慢时会整页白屏。
     val fonts = rememberMemoryFont()
     MaterialTheme(colorScheme = lightColorScheme(
         primary = Color(0xFF236F61), secondary = Color(0xFF48699B), tertiary = Color(0xFF984873),
@@ -33,13 +34,6 @@ internal fun MemoryTheme(content: @Composable () -> Unit) {
         surfaceContainerLow = Color(0xFFF6F8F9), surfaceContainerLowest = Color.White,
     ), typography = remember(fonts.font) { typography(fonts.font) },
         shapes = Shapes(small = RoundedCornerShape(4.dp), medium = RoundedCornerShape(8.dp), large = RoundedCornerShape(8.dp), extraLarge = RoundedCornerShape(8.dp))) {
-        Surface(Modifier.fillMaxSize()) {
-            if (fonts.font != null) content() else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (fonts.failed) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Font resource unavailable")
-                    Button(onClick = { fonts.attempt++ }) { Text("Retry") }
-                } else CircularProgressIndicator()
-            }
-        }
+        Surface(Modifier.fillMaxSize()) { content() }
     }
 }

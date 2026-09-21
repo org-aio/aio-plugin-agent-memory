@@ -8,6 +8,8 @@ import kotlinx.serialization.json.Json
 import site.addzero.aio.agent.memory.access.*
 import site.addzero.aio.agent.memory.intake.*
 import site.addzero.aio.agent.memory.model.*
+import site.addzero.aio.agent.memory.navigation.MemoryRoute
+import site.addzero.aio.agent.memory.navigation.RouteBridge
 import site.addzero.aio.agent.memory.transport.MemoryClient
 
 internal class MemoryState(private val scope: CoroutineScope) {
@@ -32,6 +34,62 @@ internal class MemoryState(private val scope: CoroutineScope) {
     var focused by mutableStateOf(false)
     private var selection = 0
     private var serverQuery = ""
+    private var restoring = false
+
+    // 写回 URL 时派发的 hashchange 会被自己的订阅收到；用它抑制回环。
+    private var writing = false
+
+    // 链接里指定的空间与节点；数据加载完成后落地。
+    private var routeSpaceId: String? = null
+    private var routeNodeId: String? = null
+
+    init {
+        // 首屏从链接还原状态，之后跟随宿主片段变化（后退、粘贴新链接）。
+        applyRoute(MemoryRoute.parse(RouteBridge.read()))
+        RouteBridge.subscribe {
+            if (!restoring && !writing) applyRoute(MemoryRoute.parse(RouteBridge.read()))
+        }
+    }
+
+    /** 把当前界面状态写回 URL 片段；同一状态只对应一条规范片段。 */
+    private fun publish() {
+        if (restoring) return
+        writing = true
+        try {
+            RouteBridge.write(MemoryRoute(view, selected?.id, space?.id, query, kind).encode())
+        } finally {
+            writing = false
+        }
+    }
+
+    /** 从链接恢复状态；缺失或非法字段已由 parse 回落到默认值。 */
+    private fun applyRoute(route: MemoryRoute) {
+        restoring = true
+        try {
+            view = route.view
+            query = route.query
+            kind = route.kind
+            routeSpaceId = route.spaceId
+            routeNodeId = route.nodeId
+            selected = null
+        } finally {
+            restoring = false
+        }
+    }
+
+    /** 数据就绪后落地链接指定的空间与节点。 */
+    private fun restoreRoute() {
+        routeSpaceId?.let { id ->
+            routeSpaceId = null
+            spaces.firstOrNull { it.id == id }?.let { match ->
+                if (match.id != space?.id) switchSpace(match, fromRoute = true)
+            }
+        }
+        routeNodeId?.let { id ->
+            routeNodeId = null
+            graph.nodes.firstOrNull { it.id == id }?.let(::select)
+        }
+    }
 
     val visible: List<MemoryNode>
         get() {
@@ -86,9 +144,11 @@ internal class MemoryState(private val scope: CoroutineScope) {
         selected?.let { previous ->
             graph.nodes.firstOrNull { it.id == previous.id }?.let(::select) ?: closeDetail()
         }
+        restoreRoute()
+        publish()
     }
 
-    fun switchSpace(value: MemorySpace) {
+    fun switchSpace(value: MemorySpace, fromRoute: Boolean = false) {
         if (busy) return
         closeDetail()
         dialog = null
@@ -96,8 +156,10 @@ internal class MemoryState(private val scope: CoroutineScope) {
         graph = MemoryGraph(emptyList(), emptyList(), 0)
         sources = emptyList()
         secrets = emptyList()
-        query = ""
-        serverQuery = ""
+        if (!fromRoute) {
+            query = ""
+            serverQuery = ""
+        }
         space = value
         MemoryClient.spaceId = value.id
         refresh()
@@ -142,11 +204,27 @@ internal class MemoryState(private val scope: CoroutineScope) {
 
     fun clearSearch() {
         query = ""
-        if (serverQuery.isNotEmpty()) refresh(search = true)
+        if (serverQuery.isNotEmpty()) refresh(search = true) else publish()
+    }
+
+    fun setView(value: String) {
+        view = value
+        publish()
+    }
+
+    fun setQuery(value: String) {
+        query = value
+        publish()
+    }
+
+    fun setKind(value: NodeKind?) {
+        kind = value
+        publish()
     }
 
     fun select(node: MemoryNode) {
         selected = node
+        publish()
         val generation = ++selection
         loadingDetail = true
         connections = graph.edges.filter { it.source == node.id || it.target == node.id }
@@ -173,6 +251,7 @@ internal class MemoryState(private val scope: CoroutineScope) {
         selected = null
         loadingDetail = false
         focused = false
+        publish()
     }
 
     fun follow(id: String) {

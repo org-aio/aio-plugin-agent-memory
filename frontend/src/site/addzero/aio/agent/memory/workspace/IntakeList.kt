@@ -69,7 +69,7 @@ internal fun ViewSelector(state: MemoryState) {
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = {
-                        state.view = id
+                        state.setView(id)
                         expanded = false
                     },
                 )
