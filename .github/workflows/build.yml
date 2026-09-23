@@ -5,23 +5,11 @@ on:
 permissions:
   contents: read
 jobs:
-  component:
+  rust:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
       - uses: dtolnay/rust-toolchain@stable
-      - run: npm ci --ignore-scripts
-      - run: node scripts/prepare-graph.mjs
-      - run: cargo install wasm-tools --version 1.240.0 --locked
-      - run: ./kotlin test -m shared -p jvm
-      - run: ./kotlin test -m graph -p jvm
-      - run: npm run build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agent-memory-component-and-frontend
-          path: dist/
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked

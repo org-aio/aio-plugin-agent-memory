@@ -1,0 +1,21 @@
+[package]
+name = "az-memory-server"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+az-memory-model = { path = "../shared/rust" }
+az-plugin-contract = { git = "https://github.com/zjarlin/aio-platform.git", rev = "cc8ac37a112e3ed354550b1ec23deb9e0a905fc1" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+axum = "0.8.6"
+base64 = "0.22"
+regex = "1.11"
+sha2 = "0.10"
+subtle = "2.6"
+tokio = { version = "1.47.1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls", "uuid", "json", "migrate", "macros"] }

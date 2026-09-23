@@ -1,17 +1,17 @@
 # 智能体记忆 / AIO Agent Memory
 
-仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`；Kotlin 命名空间为 `site.addzero.aio.agent.memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
+仓库：`aio-plugin-agent-memory`，父插件：`aio-plugin-agent`。子插件统一使用 `aio-plugin-<父功能>-<子功能>`，本功能名为 `memory`。仓库、发布来源和页面标识不是 Rust 运行时类型身份。
 
-Repository: `aio-plugin-agent-memory`; parent plugin: `aio-plugin-agent`. Sub-plugins use the `aio-plugin-<parent-feature>-<sub-feature>` naming; this feature is `memory`, with Kotlin namespace `site.addzero.aio.agent.memory`. The repository, release source and page identity are not Rust runtime type identity.
+Repository: `aio-plugin-agent-memory`; parent plugin: `aio-plugin-agent`. Sub-plugins use the `aio-plugin-<parent-feature>-<sub-feature>` naming; this feature is `memory`, with crate module `site.addzero.aio.agent.memory`. The repository, release source and page identity are not Rust runtime type identity.
 
-Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔离和持久整理队列属于 Memory，模型请求由 Agent 的 Pi 常驻服务执行；正式 AIO 宿主管理父子安装、持久激活和跨插件授权，界面沿用 Compose。
+Agent 对话通过受信桥调用本插件。来源、空间权限、秘密隔离和持久整理队列属于 Memory，模型请求由 Agent 的 Pi 常驻服务执行；正式 AIO 宿主管理父子安装、持久激活和跨插件授权，界面沿用 Dioxus。
 
-Agent conversations call this plugin through the trusted bridge. Sources, space permissions, secret isolation and the persistent organization queue belong to Memory; model requests are executed by the Agent's Pi resident service. A production AIO host manages parent/child installation, persistent activation and cross-plugin authorization; the UI stays in Compose.
+Agent conversations call this plugin through the trusted bridge. Sources, space permissions, secret isolation and the persistent organization queue belong to Memory; model requests are executed by the Agent's Pi resident service. A production AIO host manages parent/child installation, persistent activation and cross-plugin authorization; the UI uses Dioxus.
 
-独立的全栈记忆插件：真实 Compose 图谱界面 + Kotlin Wasm Component 后端 + PostgreSQL。
+独立的全栈记忆插件：Dioxus 图谱界面 + Rust process 后端 + PostgreSQL。
 前后端、模型、迁移以一个包发布和回滚，没有 JVM，也没有宿主预设控件协议。
 
-A standalone full-stack memory plugin: a real Compose graph UI + Kotlin Wasm Component backend + PostgreSQL. Frontend, backend, models and migrations publish and roll back as one package — no JVM, and no host-preset widget protocol.
+A standalone full-stack memory plugin: a Dioxus graph UI + Rust process backend + PostgreSQL. Frontend, backend, models and migrations publish and roll back as one package — no JVM, and no host-preset widget protocol.
 
 ## 功能 / Features
 
@@ -48,20 +48,18 @@ No LLM provider or key is bundled here; model configuration is provided by the A
 ## 结构 / Structure
 
 ```text
-frontend/    Compose wasmJs 界面、图谱适配、编辑 Dialog
-backend/     Kotlin Component、数据库事务、检索、SQL 迁移
+frontend/    Dioxus Web 工作台、图谱、编辑 Dialog
+backend/     Rust process、数据库事务、检索、SQL 迁移
 shared/      无 UI 依赖的模型与验证规则
-graph/       指定 az-compose 图谱组件的锁定源码依赖
 dev/         仅供开发和验收的 AIO v2 运行器，不进入插件包
 scripts/     作者侧构建、预览、浏览器测试
 examples/    可选的演示来源文档
 ```
 
 ```text
-frontend/    Compose wasmJs UI, graph adapter, edit dialogs
-backend/     Kotlin Component, database transactions, retrieval, SQL migrations
+frontend/    Dioxus Web workbench, graph, edit dialogs
+backend/     Rust process, database transactions, retrieval, SQL migrations
 shared/      UI-free models and validation rules
-graph/       pinned source dependency of the az-compose graph component
 dev/         AIO v2 runner for development/acceptance only, not part of the plugin package
 scripts/     author-side build, preview, browser tests
 examples/    optional demo source documents
@@ -69,33 +67,19 @@ examples/    optional demo source documents
 
 ## 构建 / Build
 
-构建插件需要 Node.js 22+ 与 `wasm-tools`，开发运行器另需 Rust 和相邻的 AIO v2 平台工作区。Kotlin wrapper 固定为 0.12.0-dev-4233 并校验分发摘要，编译器为 2.4.10，Compose 为 1.12.0-beta03。
+构建插件需要 Rust、Dioxus CLI 与相邻的 AIO v2 平台工作区。前端使用 Dioxus 0.7.9 与共享 `az-ui-components`，后端使用 Axum、SQLx 和平台 process 契约。
 
-Building the plugin requires Node.js 22+ and `wasm-tools`; the dev runner additionally needs Rust and the adjacent AIO v2 platform workspace. The Kotlin wrapper is pinned to 0.12.0-dev-4233 with its distribution checksum verified; the compiler is 2.4.10 and Compose is 1.12.0-beta03.
-
-```sh
-npm ci --ignore-scripts
-npm run build
-./kotlin test -m shared -p jvm
-./kotlin test -m graph -p jvm
-cargo build --locked --release --manifest-path dev/Cargo.toml
-```
-
-`graph/source.lock.json` 固定 `az-compose` 的 Git SHA。构建时读取该提交的通用图谱文件，不维护组件源码副本；可设置 `AIO_GRAPH_SOURCE` 使用已有本地 Git 缓存。`--working-tree` 只用于组件联调，发布必须用锁定提交重新构建。
-
-`graph/source.lock.json` pins the Git SHA of `az-compose`. The build reads the shared graph files at that commit and keeps no component source copy; `AIO_GRAPH_SOURCE` can point to an existing local Git cache. `--working-tree` is only for component integration; releases must rebuild from the locked commit.
-
-**图谱上游 `az-compose` 当前为私有仓库，构建需要它的只读访问权限。** 本机可使用 `AIO_GRAPH_SOURCE=../kmp-aio/lib/compose/az-compose npm run build`；该方式仍按锁定提交读取，不会带入未提交改动。公开插件仓库不包含该私有源码。GitHub CI 目前缺少上游只读权限，完整构建尚未通过；不要把个人令牌提交到代码或为解决构建擅自改变上游可见性。
-
-**The graph upstream `az-compose` is currently a private repository; building requires read-only access to it.** Locally you can use `AIO_GRAPH_SOURCE=../kmp-aio/lib/compose/az-compose npm run build`; that path still reads the locked commit and brings in no uncommitted changes. The public plugin repository does not contain that private source. GitHub CI currently lacks upstream read-only access, so a full build has not passed there; never commit personal tokens, and never change upstream visibility unilaterally to fix a build.
-
-WIT 绑定来自 `aio-platform/lib/plugin/contract/wit/plugin.wit`。`backend/contract/` 保存逐字复制、摘要锁定的 SDK 契约快照，使插件可以独立构建；不是另一个自定义协议。设置 `AIO_PLATFORM` 时还会检查平台契约是否一致。使用 Kotlin 官方 `wit-bindgen` 分支提交 `700f2db5e1d01f7bee8d756750c6f631171f520e` 生成：
-
-WIT bindings come from `aio-platform/lib/plugin/contract/wit/plugin.wit`. `backend/contract/` keeps verbatim, digest-locked snapshots of the SDK contract so the plugin can build independently; it is not another custom protocol. When `AIO_PLATFORM` is set, the platform contract is also checked for consistency. Bindings are generated with the Kotlin official `wit-bindgen` branch commit `700f2db5e1d01f7bee8d756750c6f631171f520e`:
+Building the plugin requires Rust, the Dioxus CLI and the adjacent AIO v2 platform workspace. The frontend uses Dioxus 0.7.9 and shared `az-ui-components`; the backend uses Axum, SQLx and the platform process contract.
 
 ```sh
-WIT_BINDGEN=/path/to/wit-bindgen sh scripts/generate-bindings.sh
+cargo check --locked --offline
+dx build --package az-memory-frontend --platform web --release --locked --offline
+./scripts/build.sh --process
 ```
+
+旧 Kotlin/Wasm Component 构建已移除。数据库迁移、业务表和密文用途字符串保持兼容；密文读写通过宿主 process Broker 的 Keyring 端点完成，历史 `aio:plugin/cryptography` 信封仍可读取。
+
+The legacy Kotlin/Wasm Component build has been removed. Database migrations, business tables and ciphertext purpose strings remain compatible; encryption reads and writes go through the host process broker's Keyring endpoints, so historical `aio:plugin/cryptography` envelopes remain readable.
 
 ## 本地预览与验收 / Local Preview & Acceptance
 
@@ -128,10 +112,10 @@ The preview listens on loopback only, validates requests with random mount ticke
 
 `aio-delivery.toml` declares the official auto-build recipe: run `scripts/build.sh` in the fullstack environment. After a default-branch push, the production host discovers, builds and publishes through the official release account; existing installs keep their original database bindings.
 
-包清单是 `aio-plugin.toml`，运行时元数据由 Component `describe` 导出，页面入口为 `index.html`。
-**仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
+包清单是 `aio-plugin.toml`，运行时元数据由 process `/aio/describe` 导出，页面入口为 `index.html`。
+**仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力、process 执行与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
 
-The package manifest is `aio-plugin.toml`; runtime metadata is exported by the Component `describe` and the page entry is `index.html`. **Only hosts supporting `aio:plugin@2.0.0`, database, encryption capabilities and v2 whole-package install are accepted. In the production AIO marketplace, enable the parent plugin “智能体” (Agent) first, then install “智能体记忆” (Agent Memory); the parent plugin needs the host's v2 process execution capability.**
+The package manifest is `aio-plugin.toml`; runtime metadata is exported by the process `/aio/describe` and the page entry is `index.html`. **Only hosts supporting `aio:plugin@2.0.0`, database, encryption capabilities, process execution and v2 whole-package install are accepted. In the production AIO marketplace, enable the parent plugin “智能体” (Agent) first, then install “智能体记忆” (Agent Memory); the parent plugin needs the host's v2 process execution capability.**
 
 进入“工作空间 → 智能体”即可对话收件和查看本轮激活图谱；独立记忆工作台位于“工作空间 → 记忆图谱”。模型未配置时继续保存加密资料并支持本地检索，wiki 整理等待空间绑定可用模型。生产发布与数据库副本验收记录见 [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md)。
 

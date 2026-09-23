@@ -1,0 +1,19 @@
+[package]
+name = "az-memory-frontend"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+az-memory-model = { path = "../shared/rust" }
+az-ui-components = { git = "https://github.com/zjarlin/dioxus-admin-workbench.git", rev = "5889f4336ae98a77d25e439ad9d74ddcd5a7b8c4" }
+dioxus = { version = "=0.7.9", default-features = false, features = ["macro", "html", "signals", "hooks", "document", "web", "launch"] }
+serde.workspace = true
+serde_json.workspace = true
+uuid = { workspace = true, features = ["js"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+web-sys = { version = "0.3", features = ["Window", "Location"] }
+console_error_panic_hook = "0.1.7"
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+dioxus-icons = { version = "0.1.0", default-features = false }
