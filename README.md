@@ -60,8 +60,7 @@ examples/    可选的演示来源文档
 frontend/    Dioxus Web workbench, graph, edit dialogs
 backend/     Rust process, database transactions, retrieval, SQL migrations
 shared/      UI-free models and validation rules
-dev/         AIO v2 runner for development/acceptance only, not part of the plugin package
-scripts/     author-side build, preview, browser tests
+scripts/     author-side build and packaging
 examples/    optional demo source documents
 ```
 
@@ -81,36 +80,17 @@ dx build --package az-memory-frontend --platform web --release --locked --offlin
 
 The legacy Kotlin/Wasm Component build has been removed. Database migrations, business tables and ciphertext purpose strings remain compatible; encryption reads and writes go through the host process broker's Keyring endpoints, so historical `aio:plugin/cryptography` envelopes remain readable.
 
-## 本地预览与验收 / Local Preview & Acceptance
+## 验收 / Acceptance
 
-准备一个**独立的开发 PostgreSQL 数据库**。AIO v2 provisioner 需要管理员连接创建最小权限角色，并要求撤销该数据库 public schema 的 PUBLIC 权限。不要对现有业务数据库直接执行这一变更。
+构建后由支持 `aio:plugin@2.0.0` 的开发宿主或正式宿主加载 `dist/frontend` 与 `dist/memory-server`，再在隔离租户安装整包。验收必须检查 Dioxus 页面挂载、数据库迁移、跨插件调用、Keyring 读写、来源导入和租户授权；只看构建成功不能代替运行时验收。
 
-Prepare a **dedicated development PostgreSQL database**. The AIO v2 provisioner needs an admin connection to create a least-privilege role and requires revoking PUBLIC privileges on that database's public schema. Do not run this change against an existing business database.
-
-```sql
-REVOKE ALL ON SCHEMA public FROM PUBLIC;
-```
-
-```sh
-export AIO_TEST_DATABASE_URL='postgres://developer@127.0.0.1:55432/memory_dev'
-dev/target/release/aio-agent-memory-dev --verify
-npm run preview -- --demo
-npm run test:browser
-```
-
-默认地址 `http://127.0.0.1:4191/`，`PORT` 可覆盖。开发运行器在忽略提交的 `.local/memory-host.json` 保存稳定来源 UUID 和宿主密钥，以平台持久绑定恢复同一数据库角色和 schema；`AIO_MEMORY_DEV_DIRECTORY` 可选择另一个目录。只有 `--verify` 使用独立临时来源，`--demo` 才导入演示资料。必须一并保留数据库和密钥文件。
-
-The default address is `http://127.0.0.1:4191/`; `PORT` overrides it. The dev runner stores a stable source UUID and host key in the git-ignored `.local/memory-host.json` and restores the same database role and schema through the platform's persistent binding; `AIO_MEMORY_DEV_DIRECTORY` selects another directory. Only `--verify` uses an isolated temporary source, and only `--demo` imports demo material. The database and key file must be kept together.
-
-预览只监听 loopback，以随机挂载票据校验请求，用平台原版 v2 通信桥和沙箱 iframe。数据库凭据只存在于开发宿主进程，前端和 Wasm 都拿不到。图谱选择先更新本地状态，随后读取该节点完整正文；拖动、缩放、布局和视图切换不发请求。
-
-The preview listens on loopback only, validates requests with random mount tickets, and uses the platform's original v2 bridge and sandboxed iframes. Database credentials exist only in the dev host process — neither the frontend nor Wasm can reach them. Selecting a graph node first updates local state, then reads that node's full body; drag, zoom, layout and view switching make no requests.
+After build, load `dist/frontend` and `dist/memory-server` in a development or production host supporting `aio:plugin@2.0.0`, then install the whole package in an isolated tenant. Acceptance must cover Dioxus page mounting, database migrations, cross-plugin calls, Keyring access, source import and tenant authorization; a successful build is not runtime acceptance.
 
 ## 发布边界 / Release Boundaries
 
-`aio-delivery.toml` 声明官方自动构建配方：使用 fullstack 环境执行 `scripts/build.sh`。默认分支推送后，正式宿主按官方发布账号发现、构建并上架，已有安装沿用原数据库绑定。
+`aio-delivery.toml` 声明官方自动构建配方：使用 rust 环境执行 `scripts/build.sh --process`。默认分支推送后，正式宿主按官方发布账号发现、构建并上架，已有安装沿用原数据库绑定。
 
-`aio-delivery.toml` declares the official auto-build recipe: run `scripts/build.sh` in the fullstack environment. After a default-branch push, the production host discovers, builds and publishes through the official release account; existing installs keep their original database bindings.
+`aio-delivery.toml` declares the official auto-build recipe: run `scripts/build.sh --process` in the rust environment. After a default-branch push, the production host discovers, builds and publishes through the official release account; existing installs keep their original database bindings.
 
 包清单是 `aio-plugin.toml`，运行时元数据由 process `/aio/describe` 导出，页面入口为 `index.html`。
 **仅接受支持 `aio:plugin@2.0.0`、数据库、加密能力、process 执行与 v2 整包安装的宿主。正式 AIO 市场中先启用父插件“智能体”，再安装“智能体记忆”；父插件需要宿主的 v2 process 执行能力。**
@@ -121,13 +101,9 @@ The package manifest is `aio-plugin.toml`; runtime metadata is exported by the p
 
 Open “工作空间 → 智能体” (Workspace → Agent) to converse and view this turn's activated graph; the standalone memory workbench is at “工作空间 → 记忆图谱” (Workspace → Memory Graph). When no model is configured, encrypted material still saves and local retrieval works; wiki organization waits for a usable model bound to the space. Production release and database-replica acceptance records are in the [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md) (AIO host deployment doc).
 
-本仓库 `dev/` 依赖相邻平台工作区的 v2 crates，平台至少需要包含提交 `01f8fc4`（持久绑定、加密、激活和受控约束迁移）；旧版平台不能运行该验收工具。
+数据库按插件与租户独立 schema/角色隔离；单次图谱最多 200 节点、800 边，上下文最多 24 节点，截断会显式返回。正式数据备份与 schema 兼容回滚由宿主管理，卸载不应默认删除业务数据。
 
-This repository's `dev/` depends on the v2 crates of the neighboring platform workspace; the platform must at least include commit `01f8fc4` (persistent binding, encryption, activation and controlled-constraint migrations). Older platforms cannot run this acceptance tool.
-
-前端包含本地 Noto Sans CJK 字体及 OFL 许可证，加载不需要公网字体/CDN。数据库按插件与租户独立 schema/角色隔离；单次图谱最多 200 节点、800 边，上下文最多 24 节点，截断会显式返回。正式数据备份与 schema 兼容回滚由宿主管理，卸载不应默认删除业务数据。
-
-The frontend bundles a local Noto Sans CJK font with its OFL license, so loading needs no public font/CDN. The database is isolated per plugin and tenant by schema/role; a single graph caps at 200 nodes and 800 edges, context at 24 nodes, with truncation returned explicitly. Production data backups and schema-compatible rollback are managed by the host; uninstall should not delete business data by default.
+The database is isolated per plugin and tenant by schema/role; a single graph caps at 200 nodes and 800 edges, context at 24 nodes, with truncation returned explicitly. Production data backups and schema-compatible rollback are managed by the host; uninstall should not delete business data by default.
 
 接口与限制见 [服务契约](docs/service.md)。
 
