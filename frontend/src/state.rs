@@ -8,6 +8,7 @@ use serde_json::json;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum View {
+    Quick,
     Wiki,
     Graph,
     Sources,
@@ -18,6 +19,7 @@ pub enum View {
 impl View {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Quick => "随心记",
             Self::Wiki => "Wiki",
             Self::Graph => "图谱",
             Self::Sources => "来源",
@@ -71,7 +73,7 @@ impl Default for MemoryState {
 
 impl Default for View {
     fn default() -> Self {
-        Self::Wiki
+        Self::Quick
     }
 }
 
@@ -329,7 +331,12 @@ pub async fn resolve(mut state: Signal<MemoryState>, id: String, accept: bool) {
     }
 }
 
-pub async fn capture(mut state: Signal<MemoryState>, title: String, text: String, url: String) {
+pub async fn capture(
+    mut state: Signal<MemoryState>,
+    title: String,
+    text: String,
+    url: String,
+) -> Result<(), String> {
     let space_id = state.peek().space_id.clone();
     let request = az_memory_model::ImportRequest {
         request_id: uuid::Uuid::new_v4().to_string(),
@@ -346,10 +353,14 @@ pub async fn capture(mut state: Signal<MemoryState>, title: String, text: String
     .await
     {
         Ok(_) => {
-            state.write().notice = Some("资料已收下".into());
+            state.write().notice = Some("已记下".into());
             refresh(state).await;
+            Ok(())
         }
-        Err(error) => state.write().error = Some(error),
+        Err(error) => {
+            state.write().error = Some(error.clone());
+            Err(error)
+        }
     }
 }
 

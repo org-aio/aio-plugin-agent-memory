@@ -97,9 +97,9 @@ After build, load `dist/frontend` and `dist/memory-server` in a development or p
 
 The package manifest is `aio-plugin.toml`; runtime metadata is exported by the process `/aio/describe` and the page entry is `index.html`. **Only hosts supporting `aio:plugin@2.0.0`, database, encryption capabilities, process execution and v2 whole-package install are accepted. In the production AIO marketplace, enable the parent plugin “智能体” (Agent) first, then install “智能体记忆” (Agent Memory); the parent plugin needs the host's v2 process execution capability.**
 
-进入“工作空间 → 智能体”即可对话收件和查看本轮激活图谱；独立记忆工作台位于“工作空间 → 记忆图谱”。模型未配置时继续保存加密资料并支持本地检索，wiki 整理等待空间绑定可用模型。生产发布与数据库副本验收记录见 [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md)。
+进入“工作空间 → 智能体”即可对话收件和查看本轮激活图谱；独立记忆工作台位于“工作空间 → 记忆图谱”，默认进入“随心记”，输入后先通过加密收件保存，再刷新最近记录。模型未配置时继续保存加密资料并支持本地检索，wiki 整理等待空间绑定可用模型。生产发布与数据库副本验收记录见 [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md)。
 
-Open “工作空间 → 智能体” (Workspace → Agent) to converse and view this turn's activated graph; the standalone memory workbench is at “工作空间 → 记忆图谱” (Workspace → Memory Graph). When no model is configured, encrypted material still saves and local retrieval works; wiki organization waits for a usable model bound to the space. Production release and database-replica acceptance records are in the [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md) (AIO host deployment doc).
+Open “工作空间 → 智能体” (Workspace → Agent) to converse and view this turn's activated graph; the standalone memory workbench is at “工作空间 → 记忆图谱” (Workspace → Memory Graph) and opens on “随心记” (Quick Capture), saving through the encrypted intake API before refreshing recent records. When no model is configured, encrypted material still saves and local retrieval works; wiki organization waits for a usable model bound to the space. Production release and database-replica acceptance records are in the [AIO 宿主部署文档](https://github.com/zjarlin/aio-idea/blob/main/deploy/252/README.md) (AIO host deployment doc).
 
 数据库按插件与租户独立 schema/角色隔离；单次图谱最多 200 节点、800 边，上下文最多 24 节点，截断会显式返回。正式数据备份与 schema 兼容回滚由宿主管理，卸载不应默认删除业务数据。
 

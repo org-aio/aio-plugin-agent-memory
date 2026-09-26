@@ -2,6 +2,7 @@ mod dialogs;
 mod graph_view;
 mod inspector;
 mod panels;
+mod quick_capture;
 
 use crate::state::{self, MemoryState, View};
 use az_ui_components::{
@@ -10,7 +11,9 @@ use az_ui_components::{
     select::{Select, SelectItem},
 };
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{BookOpen, Database, KeyRound, ListChecks, Network, Plus, RefreshCw};
+use dioxus_icons::lucide::{
+    BookOpen, Database, KeyRound, ListChecks, Network, NotebookPen, Plus, RefreshCw,
+};
 
 #[component]
 pub fn MemoryWorkspace() -> Element {
@@ -28,8 +31,8 @@ pub fn MemoryWorkspace() -> Element {
     rsx! {
         PageSurface {
             PageHeader {
-                title: "智能体记忆",
-                detail: "管理知识空间、资料收件、图谱与凭据",
+                title: "随心记",
+                detail: "先记下来，再整理成 Wiki 和知识图谱",
                 div { class: "flex gap-2",
                     Button {
                         variant: ButtonVariant::Outline,
@@ -76,6 +79,7 @@ pub fn MemoryWorkspace() -> Element {
                     }
                     nav {
                         style: "display:grid;gap:4px;",
+                        ViewButton { view: View::Quick, current, icon: rsx! { NotebookPen { size: "16px" } } }
                         ViewButton { view: View::Wiki, current, icon: rsx! { BookOpen { size: "16px" } } }
                         ViewButton { view: View::Graph, current, icon: rsx! { Network { size: "16px" } } }
                         ViewButton { view: View::Sources, current, icon: rsx! { Database { size: "16px" } } }
@@ -89,6 +93,7 @@ pub fn MemoryWorkspace() -> Element {
                         RequestState {}
                     } else {
                         match current {
+                            View::Quick => rsx! { quick_capture::QuickCapture {} },
                             View::Wiki => rsx! { panels::WikiPanel { on_create: move |_| node_dialog.set(true) } },
                             View::Graph => rsx! { graph_view::GraphPanel {} },
                             View::Sources => rsx! { panels::SourcesPanel {} },
