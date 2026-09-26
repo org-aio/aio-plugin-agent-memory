@@ -40,6 +40,42 @@ pub struct SourceView {
     #[serde(default)]
     pub secrets: Vec<SecretSummary>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub origin: String,
+    #[serde(default)]
+    pub can_edit: bool,
+    #[serde(default)]
+    pub can_delete: bool,
+}
+
+/// 来源修订必须携带预览时的版本，原文仍由收件管线隔离和加密。
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceUpdate {
+    pub text: String,
+    pub version: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceQuery {
+    pub space_id: Option<String>,
+    #[serde(default)]
+    pub query: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub offset: i64,
+    #[serde(default = "source_limit")]
+    pub limit: i64,
+}
+
+fn source_limit() -> i64 {
+    200
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -118,6 +154,8 @@ pub struct ReviewRequest {
 pub struct SourceList {
     pub sources: Vec<SourceView>,
     pub truncated: bool,
+    #[serde(default)]
+    pub total: i64,
 }
 
 fn chat_origin() -> String {

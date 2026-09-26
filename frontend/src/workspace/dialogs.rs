@@ -111,6 +111,7 @@ fn KindField(kind: Signal<NodeKind>) -> Element {
 #[component]
 pub fn SourceDialog(on_close: EventHandler<()>) -> Element {
     let state = use_context::<Signal<MemoryState>>();
+    let mut notes = use_context::<Signal<super::notes::NotesState>>();
     let mut title = use_signal(String::new);
     let mut url = use_signal(String::new);
     let mut text = use_signal(String::new);
@@ -125,7 +126,9 @@ pub fn SourceDialog(on_close: EventHandler<()>) -> Element {
                     if text().trim().is_empty() {
                         return Err("资料正文不能为空".into());
                     }
-                    state::capture(state, title(), text(), url()).await
+                    state::capture(state, title(), text(), url()).await?;
+                    notes.write().revision += 1;
+                    Ok(())
                 }) as az_ui_components::admin::AsyncResult<()>
             },
             TextInput { label: "标题", value: title(), on_change: move |value| title.set(value) }

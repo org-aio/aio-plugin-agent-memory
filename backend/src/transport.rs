@@ -76,7 +76,12 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
         )
         .route("/capture", post(crate::service::intake::capture))
         .route("/sources", get(crate::service::intake::list))
-        .route("/sources/{id}", get(crate::service::intake::get))
+        .route(
+            "/sources/{id}",
+            get(crate::service::intake::get)
+                .put(crate::service::source_edit::update)
+                .delete(crate::service::nodes::delete),
+        )
         .route(
             "/sources/{id}/original",
             post(crate::service::intake::original),

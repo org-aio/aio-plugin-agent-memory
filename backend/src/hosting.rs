@@ -26,7 +26,7 @@ pub async fn describe() -> axum::Json<serde_json::Value> {
         "label": "智能体记忆",
         "pages": [{
             "id": "agent-memory",
-            "label": "记忆图谱",
+            "label": "记忆",
             "entry": "index.html",
             "scene": ["workspace", "工作空间"],
             "menu_path": ["智能体"],

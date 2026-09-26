@@ -8,8 +8,25 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aio_memory_crud_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
+      - run: cargo check -p az-memory-frontend --target wasm32-unknown-unknown --locked
+      - run: cargo test -p az-memory-server --test source_crud --locked -- --ignored
+        env:
+          AIO_MEMORY_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/aio_memory_crud_test

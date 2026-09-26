@@ -7,8 +7,10 @@
 | 方法 | 路径 | 契约 |
 |---|---|---|
 | POST | `/capture` | `{requestId,text,spaceId?,origin?,reference?,clarifies?}` 返回 202 `SourceView` |
-| GET | `/sources` | `{sources,truncated}`，最多 200 项 |
+| GET | `/sources` | `spaceId?,query?,status?,offset?,limit?`，返回 `{sources,total,truncated}`；默认 200 项，limit 为 1..200 |
 | GET | `/sources/{id}` | 净化正文、状态、秘密引用与可操作权限 |
+| PUT | `/sources/{id}` | `{text,version}`，仍有写权限的交互式提交者修订原文，重新隔离、加密并排队整理 |
+| DELETE | `/sources/{id}` | 交互式编辑者删除来源，清除原文、凭据和旧任务租约，停止相关知识召回 |
 | POST | `/sources/{id}/original` | 仅交互式提交者，返回 `{value}` |
 | POST | `/sources/{id}/retry` | 失败、待整理或冲突任务重新排队 |
 | POST | `/tasks/claim` | `{spaceId}`，工作进程领取净化来源、候选条目、模型绑定和租约 |
@@ -19,6 +21,8 @@
 | POST | `/import` | `{requestId,title,text,url?}`，文件/文本采用同一隔离管线，重试不重复创建来源 |
 
 `SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict、failed 或 recorded。recorded 表示明确查找的对话来源，保留收件但不生成 wiki 任务，也不参与普通检索与图谱。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
+
+来源列表只搜索净化标题和正文，`query` 最多 256 字符，通配符按字面处理；`offset` 从 0 开始，按内容更新时间和 ID 稳定排序。返回的 `title`、`version`、`origin`、`canEdit`、`canDelete` 用于笔记展示和操作，服务端仍重新鉴权。修改必须带当前版本，冲突返回 409；未变化的秘密字段保留 ID 和独立授权，移除的字段及其授权一并删除。编辑与删除先锁整理任务，再修改来源，旧租约提交不能恢复旧内容。
 
 `origin` 为 chat/note/import。`clarifies` 指向同一原对话、同一提交者的保密暂存资料；仅明确的整段秘密用途说明可以解除暂存，未识别说明不改变原来源。加密原文保留，净化版本和说明来源留痕。
 

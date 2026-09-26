@@ -89,8 +89,16 @@ pub async fn delete(
     Path(id): Path<String>,
     context: MemoryContext,
 ) -> Result<axum::http::StatusCode> {
+    if context.worker() {
+        return Err(MemoryError::Access);
+    }
     let mut transaction = service.pool.begin().await?;
     let space = require_node_space(&mut transaction, &context, &id, true).await?;
+    // 来源删除和后台整理使用同样的锁顺序，删除后旧任务不能继续提交。
+    sqlx::query("SELECT id FROM plugin_memory_tasks WHERE id=$1 FOR UPDATE")
+        .bind(&id)
+        .fetch_optional(&mut *transaction)
+        .await?;
     store::get_node(&mut transaction, &space.id, &id).await?;
     let source: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM plugin_memory_sources WHERE id=$1)")

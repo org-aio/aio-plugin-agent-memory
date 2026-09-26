@@ -13,7 +13,7 @@ use axum::{
 };
 use az_memory_model::{
     CaptureRequest, ImportRequest, ImportResult, NodeDraft, NodeKind, RevealedSecret, SourceList,
-    SourceView,
+    SourceQuery, SourceView,
 };
 use regex::Regex;
 use sqlx::Row;
@@ -193,9 +193,25 @@ pub async fn capture(
 
 pub async fn list(
     State(service): State<Arc<MemoryService>>,
-    Query(query): Query<SpaceQuery>,
+    Query(query): Query<SourceQuery>,
     context: MemoryContext,
 ) -> Result<Json<SourceList>> {
+    if query.query.chars().count() > 256
+        || query.offset < 0
+        || !(1..=200).contains(&query.limit)
+        || !matches!(
+            query.status.as_str(),
+            "" | "pending"
+                | "processing"
+                | "complete"
+                | "conflict"
+                | "failed"
+                | "quarantined"
+                | "recorded"
+        )
+    {
+        return Err(MemoryError::Input("搜索或分页条件无效".into()));
+    }
     let mut transaction = service.pool.begin().await?;
     let space = require_space(
         &mut transaction,
@@ -205,17 +221,33 @@ pub async fn list(
         false,
     )
     .await?;
-    let ids = sqlx::query_scalar::<_, String>("SELECT id FROM plugin_memory_sources WHERE space_id=$1 AND status<>'deleted' ORDER BY updated_at DESC,id LIMIT 201")
+    let pattern = format!(
+        "%{}%",
+        query
+            .query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
+    let condition = "s.space_id=$1 AND s.status<>'deleted' AND ($2='' OR s.status=$2) AND (n.title ILIKE $3 OR n.content ILIKE $3)";
+    let total = sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE {condition}"))
+        .bind(&space.id).bind(&query.status).bind(&pattern).fetch_one(&mut *transaction).await?;
+    let ids = sqlx::query_scalar::<_, String>(&format!("SELECT s.id FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE {condition} ORDER BY n.updated_at DESC,s.id LIMIT $4 OFFSET $5"))
         .bind(&space.id)
+        .bind(&query.status).bind(&pattern).bind(query.limit).bind(query.offset)
         .fetch_all(&mut *transaction)
         .await?;
-    let truncated = ids.len() > 200;
+    let truncated = query.offset.saturating_add(ids.len() as i64) < total;
     let mut sources = Vec::new();
-    for id in ids.into_iter().take(200) {
+    for id in ids {
         sources.push(source_view(&mut transaction, &context, &id).await?);
     }
     transaction.commit().await?;
-    Ok(Json(SourceList { sources, truncated }))
+    Ok(Json(SourceList {
+        sources,
+        truncated,
+        total,
+    }))
 }
 
 pub async fn get(
@@ -336,7 +368,7 @@ pub(crate) async fn source_view(
     id: &str,
 ) -> Result<SourceView> {
     let space = require_node_space(transaction, context, id, false).await?;
-    let row = sqlx::query("SELECT s.id,s.space_id,n.content,s.status,s.created_by,s.updated_at,s.error FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE s.id=$1 AND s.status<>'deleted'")
+    let row = sqlx::query("SELECT s.id,s.space_id,n.content,s.status,s.created_by,n.updated_at,s.error,n.title,n.version,s.origin FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE s.id=$1 AND s.status<>'deleted'")
         .bind(id)
         .fetch_optional(&mut **transaction)
         .await?
@@ -350,6 +382,13 @@ pub(crate) async fn source_view(
         updated_at: row.try_get(5)?,
         secrets: secrets::summaries_in(transaction, context, &space.id, Some(id)).await?,
         error: row.try_get(6)?,
+        title: row.try_get(7)?,
+        version: row.try_get(8)?,
+        origin: row.try_get(9)?,
+        can_edit: space.role.can_write()
+            && !context.worker()
+            && row.try_get::<String, _>(4)? == context.user_id,
+        can_delete: space.role.can_write() && !context.worker(),
     })
 }
 
