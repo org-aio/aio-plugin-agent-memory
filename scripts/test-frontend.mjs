@@ -40,6 +40,26 @@ try {
   await open();
   await geometry();
   await page.screenshot({ path: "test-results/memory-desktop.png" });
+  // 用真实滚轮验证可达性，避免 locator.click 的自动滚动掩盖 overflow:hidden。
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+    await expect(frame.getByRole("button", { name: "下一页", exact: true })).toBeInViewport();
+    await frame.locator(".memory-note").first().hover();
+    await page.mouse.wheel(0, 20000);
+    await expect.poll(() => frame.locator(".memory-app").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(frame.locator(".memory-note").last()).toBeInViewport();
+    await expect(frame.getByRole("button", { name: "下一页", exact: true })).toBeInViewport();
+    await expect.poll(() => frame.locator(".memory-pagination").evaluate((element) => Math.abs(element.getBoundingClientRect().top))).toBeLessThanOrEqual(1);
+    await geometry();
+    await page.screenshot({ path: `test-results/memory-pagination-${width}.png` });
+    await frame.getByRole("button", { name: "下一页", exact: true }).click();
+    await expect(frame.locator(".memory-note")).toHaveCount(4);
+    await expect(frame.locator(".memory-note").last()).toContainText("归档 28");
+    await expect(frame.getByRole("button", { name: "下一页", exact: true })).toBeDisabled();
+    await frame.getByRole("button", { name: "上一页", exact: true }).click();
+    await expect(frame.locator(".memory-note")).toHaveCount(24);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await frame.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(frame.locator(".memory-note")).toHaveCount(4);
   await frame.getByRole("button", { name: "上一页", exact: true }).click();

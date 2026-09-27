@@ -112,6 +112,16 @@ pub fn Notes() -> Element {
                         option { value: "recorded", "对话记录" }
                     }
                 }
+                if let Some(Ok(list)) = &response {
+                    nav { class: "memory-pagination", aria_label: "记录分页",
+                        span { "{list.total} 条记录" }
+                        Button { size: ButtonSize::IconSm, variant: ButtonVariant::Outline, title: "上一页", aria_label: "上一页",
+                            disabled: loading || offset() == 0, onclick: move |_| offset.set((offset() - 24).max(0)), ArrowLeft { size: 16 } }
+                        span { "第 {offset() / 24 + 1} / {(list.total + 23).max(24) / 24} 页" }
+                        Button { size: ButtonSize::IconSm, variant: ButtonVariant::Outline, title: "下一页", aria_label: "下一页",
+                            disabled: loading || !list.truncated, onclick: move |_| offset.set(offset() + 24), ArrowRight { size: 16 } }
+                    }
+                }
                 if loading { RequestState {} }
                 else { match response {
                     Some(Ok(list)) => rsx! {
@@ -126,14 +136,6 @@ pub fn Notes() -> Element {
                                     on_delete: move |source| dialog.set(Some(ActiveDialog::Delete(source))),
                                 }
                             }
-                        }
-                        footer { class: "memory-pagination",
-                            span { "{list.total} 条记录" }
-                            Button { size: ButtonSize::IconSm, variant: ButtonVariant::Outline, title: "上一页", aria_label: "上一页",
-                                disabled: offset() == 0, onclick: move |_| offset.set((offset() - 24).max(0)), ArrowLeft { size: 16 } }
-                            span { "{offset() / 24 + 1} / {(list.total + 23).max(24) / 24}" }
-                            Button { size: ButtonSize::IconSm, variant: ButtonVariant::Outline, title: "下一页", aria_label: "下一页",
-                                disabled: !list.truncated, onclick: move |_| offset.set(offset() + 24), ArrowRight { size: 16 } }
                         }
                     },
                     Some(Err(error)) => rsx! { RequestState { error: Some(error), on_retry: move |_| results.restart() } },

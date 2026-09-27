@@ -1,4 +1,4 @@
-.memory-app { box-sizing: border-box; min-width: 0; max-width: 1440px; margin: 0 auto; padding: 20px 28px 36px; color: var(--foreground); }
+.memory-app { --memory-inset: 20px; box-sizing: border-box; height: 100%; overflow-y: auto; scrollbar-gutter: stable; scroll-padding-top: 64px; min-width: 0; max-width: 1440px; margin: 0 auto; padding: 20px 28px 36px; color: var(--foreground); }
 .memory-app *, .memory-dialog *, .memory-confirm * { box-sizing: border-box; }
 .memory-app svg, .memory-dialog svg { flex: 0 0 auto; }
 .memory-header { display: flex; align-items: center; gap: 20px; padding-bottom: 16px; }
@@ -53,7 +53,8 @@
 .memory-app .dx-markdown th, .memory-app .dx-markdown td, .memory-dialog .dx-markdown th, .memory-dialog .dx-markdown td { border-color: var(--border); }
 .memory-app .dx-markdown a, .memory-dialog .dx-markdown a { color: var(--info); text-decoration: underline; }
 .memory-app .dx-markdown blockquote, .memory-dialog .dx-markdown blockquote { color: var(--secondary-foreground); border-color: var(--border); }
-.memory-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 20px 0 4px; font-size: 12px; color: var(--muted-foreground); }
+.memory-pagination { position: sticky; top: calc(0px - var(--memory-inset)); z-index: 10; display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-height: 52px; padding: 8px 0; margin-bottom: 12px; border-bottom: 1px solid var(--border); background: var(--background); font-size: 12px; color: var(--muted-foreground); }
+.memory-pagination > span { white-space: nowrap; }
 .memory-pagination > span:first-child { margin-right: auto; }
 .memory-dialog.dx-dialog { width: 820px; max-width: calc(100% - 32px); padding: 20px; gap: 12px; overflow: hidden; }
 .memory-dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -67,12 +68,12 @@
 .memory-confirm.dx-dialog { max-width: min(440px, calc(100% - 32px)); }
 .memory-delete-title { max-height: 100px; overflow: auto; overflow-wrap: anywhere; color: var(--secondary-foreground); }
 @media (max-width: 840px) {
-  .memory-app { padding: 16px; }
+  .memory-app { --memory-inset: 16px; padding: 16px; }
   .memory-feed__items { grid-template-columns: minmax(0, 1fr); }
   .memory-composer { margin-bottom: 24px; }
 }
 @media (max-width: 480px) {
-  .memory-app { padding: 12px; }
+  .memory-app { --memory-inset: 12px; padding: 12px; }
   .memory-header { gap: 10px; flex-wrap: wrap; }
   .memory-header h1 { font-size: 18px; }
   .memory-space { flex: 1; width: auto; }
