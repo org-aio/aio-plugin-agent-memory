@@ -1,0 +1,15 @@
+import { chromium } from '/Users/zjarlin/aio/workspace/zjarlin/aio/aio-plugin-agent-memory/node_modules/playwright/index.mjs';
+const url = 'https://aio.addzero.site/api/runtime/components/assets/8e0640e5868a4530b04270c536bbc350/index.html';
+const b = await chromium.launch({ headless: true, executablePath: '/Users/zjarlin/Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' });
+const pg = await b.newPage();
+const errs = [], reqs = [];
+pg.on('console', m => { if(['error','warning'].includes(m.type())) errs.push(m.type()+': '+m.text()); });
+pg.on('pageerror', e => errs.push('pageerror: '+e.message));
+pg.on('response', r => { if(r.url().includes('az-memory')||r.url().includes('__aio_modules')) reqs.push(r.status()+' '+r.url().slice(-70)); });
+await pg.goto(url, { waitUntil: 'networkidle', timeout: 30000 }).catch(e=>errs.push('goto:'+e.message));
+await pg.waitForTimeout(5000);
+const body = await pg.evaluate(() => ({ text:(document.body?.innerText||'').slice(0,500), htmlLen: document.body?document.body.innerHTML.length:-1, title: document.title }));
+console.log('BODY:', JSON.stringify(body, null, 1));
+console.log('REQUESTS:', JSON.stringify(reqs, null, 1));
+console.log('ERRORS:', JSON.stringify(errs.slice(0,20), null, 1));
+await b.close();
