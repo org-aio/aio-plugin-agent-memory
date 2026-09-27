@@ -65,6 +65,8 @@ pub struct SourceUpdate {
 pub struct SourceQuery {
     pub space_id: Option<String>,
     #[serde(default)]
+    pub distinct: bool,
+    #[serde(default)]
     pub query: String,
     #[serde(default)]
     pub status: String,

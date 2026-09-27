@@ -17,6 +17,9 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio::sync::Mutex;
 
+#[path = "support/source_dedup.rs"]
+mod source_dedup;
+
 // 夹具模拟宿主 Keyring：数据库只保存随机票据，明文只驻留在测试进程内。
 type Vault = Arc<Mutex<HashMap<String, (String, String)>>>;
 
@@ -59,6 +62,7 @@ async fn open(
 fn query(space: &str, text: &str, offset: i64, limit: i64) -> SourceQuery {
     SourceQuery {
         space_id: Some(space.into()),
+        distinct: false,
         query: text.into(),
         status: String::new(),
         offset,
@@ -382,7 +386,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
         service::intake::list(
             State(service.clone()),
             Query(query(space, "修订", 0, 24)),
-            owner
+            owner.clone()
         )
         .await
         .map_err(service_error)?
@@ -390,5 +394,6 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
         .total,
         0
     );
+    source_dedup::run(service, pool, owner, space.clone()).await?;
     Ok(())
 }

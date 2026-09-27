@@ -38,6 +38,8 @@ async function geometry() {
 
 try {
   await open();
+  await expect(frame.locator(".memory-pagination")).toContainText("28 条记录");
+  expect(await frame.evaluate(() => window.__memorySources.length)).toBe(29);
   await geometry();
   await page.screenshot({ path: "test-results/memory-desktop.png" });
   // 用真实滚轮验证可达性，避免 locator.click 的自动滚动掩盖 overflow:hidden。
@@ -103,6 +105,12 @@ try {
   const captures = await frame.evaluate(() => window.__memoryCalls.filter((call) => call.path === "/capture"));
   expect(captures).toHaveLength(2);
   expect(captures[0].body.requestId).toBe(captures[1].body.requestId);
+  await input.fill(`  ${note.replaceAll("\n", "\r\n")}  `);
+  await frame.getByRole("button", { name: "保存随心记" }).click();
+  await expect(frame.getByText("内容已存在，无需重复添加", { exact: true })).toBeVisible();
+  await expect(card).toHaveCount(1);
+  expect(await frame.evaluate(() => window.__memorySources.length)).toBe(30);
+  await input.fill("");
 
   await card.getByRole("button", { name: "查看详情" }).click();
   await expect(frame.getByRole("dialog").locator("table")).toBeVisible();

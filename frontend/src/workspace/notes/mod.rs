@@ -75,7 +75,9 @@ pub fn Notes() -> Element {
         let encoded = js_sys::encode_uri_component(&search)
             .as_string()
             .unwrap_or_default();
-        let path = format!("/sources?query={encoded}&status={filter}&offset={start}&limit=24");
+        let path = format!(
+            "/sources?distinct=true&query={encoded}&status={filter}&offset={start}&limit=24"
+        );
         transport::space_request::<SourceList>(
             "GET",
             &path,

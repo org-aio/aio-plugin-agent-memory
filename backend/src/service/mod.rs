@@ -8,6 +8,7 @@ pub mod nodes;
 pub mod queue;
 pub mod routing;
 pub mod secrets;
+mod source_dedup;
 pub mod source_edit;
 pub mod spaces;
 pub mod store;

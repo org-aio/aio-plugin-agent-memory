@@ -21,6 +21,14 @@ function installFixture() {
     createdBy: "fixture-user", updatedAt: Date.now() - index * 3600_000,
     secrets: [], error: null, version: 1, canEdit: !readonly, canDelete: !readonly,
   }));
+  // 历史重复来源仍保留，随心记查询应在分页前折叠。
+  window.__memorySources.push({ ...window.__memorySources[0], id: "legacy-duplicate", updatedAt: 1, status: "recorded" });
+  const normalize = (text) => text.replace(/\r\n/g, "\n").replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+  const rejectDuplicate = (text, spaceId, except) => {
+    if (window.__memorySources.some((source) => source.id !== except && source.spaceId === spaceId && source.createdBy === "fixture-user" && normalize(source.text) === normalize(text))) {
+      throw new Error("内容已存在，无需重复添加");
+    }
+  };
   let serial = 100;
   const requests = new Map();
   window.aioPlugin = {
@@ -44,14 +52,25 @@ function installFixture() {
         const status = url.searchParams.get("status");
         const offset = Number(url.searchParams.get("offset") || 0);
         const limit = Number(url.searchParams.get("limit") || 200);
-        const sources = window.__memorySources.filter((source) =>
+        let sources = window.__memorySources.filter((source) =>
           source.spaceId === (url.searchParams.get("spaceId") || "space-1") &&
           source.text.toLowerCase().includes(q) && (!status || source.status === status));
+        sources.sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+        if (url.searchParams.get("distinct") === "true") {
+          const seen = new Set();
+          sources = sources.filter((source) => {
+            const key = JSON.stringify([source.createdBy, source.secrets.length || source.status === "quarantined" ? source.id : "", normalize(source.text)]);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
         return { sources: sources.slice(offset, offset + limit), total: sources.length, truncated: offset + limit < sources.length };
       }
       if ((route === "/capture" || route === "/import") && method === "POST") {
         if (readonly) throw new Error("当前空间只读");
         if (requests.has(body.requestId)) return requests.get(body.requestId);
+        rejectDuplicate(body.text, body.spaceId || url.searchParams.get("spaceId") || "space-1");
         const source = {
           id: `note-${serial++}`, spaceId: body.spaceId || url.searchParams.get("spaceId") || "space-1",
           text: body.text, title: body.title || body.text.split("\n")[0], status: "pending", origin: "note",
@@ -71,6 +90,7 @@ function installFixture() {
         if (readonly) throw new Error("当前空间只读");
         if (method === "PUT") {
           if (body.version !== source.version) throw new Error("版本已变化");
+          rejectDuplicate(body.text, source.spaceId, source.id);
           Object.assign(source, { text: body.text, version: source.version + 1, updatedAt: Date.now(), status: "pending" });
           return source;
         }

@@ -36,6 +36,7 @@ pub async fn capture(
         false,
     )
     .await?;
+    super::source_dedup::lock(&mut transaction, &space.id, &context.user_id).await?;
     let existing = sqlx::query("SELECT id,ciphertext,status FROM plugin_memory_sources WHERE space_id=$1 AND created_by=$2 AND request_id=$3 FOR UPDATE")
         .bind(&space.id)
         .bind(&context.user_id)
@@ -60,6 +61,18 @@ pub async fn capture(
         let source = source_view(&mut transaction, &context, &id).await?;
         transaction.commit().await?;
         return Ok(Json(source));
+    }
+    // 聊天轮次保留独立来源与澄清关联；随心记和资料导入拒绝重复新增。
+    if request.origin != "chat" && request.clarifies.is_none() {
+        super::source_dedup::reject_duplicate(
+            &service,
+            &mut transaction,
+            &space.id,
+            &context.user_id,
+            &request.text,
+            None,
+        )
+        .await?;
     }
     let isolated = isolate(&request.text, &[]);
     let title = if isolated.quarantined {
@@ -230,11 +243,25 @@ pub async fn list(
             .replace('_', "\\_")
     );
     let condition = "s.space_id=$1 AND s.status<>'deleted' AND ($2='' OR s.status=$2) AND (n.title ILIKE $3 OR n.content ILIKE $3)";
-    let total = sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE {condition}"))
-        .bind(&space.id).bind(&query.status).bind(&pattern).fetch_one(&mut *transaction).await?;
-    let ids = sqlx::query_scalar::<_, String>(&format!("SELECT s.id FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE {condition} ORDER BY n.updated_at DESC,s.id LIMIT $4 OFFSET $5"))
+    // 先过滤并去重，再计算数量和分页；保密内容不能按净化占位符合并。
+    let candidates = format!("SELECT s.id,n.updated_at,row_number() OVER (
+        PARTITION BY s.created_by,
+        CASE WHEN NOT $4 OR s.status='quarantined' OR EXISTS(SELECT 1 FROM plugin_memory_secrets sec WHERE sec.source_id=s.id) THEN s.id ELSE '' END,
+        btrim(replace(n.content,E'\\r\\n',E'\\n'),E' \\t\\r\\n')
+        ORDER BY n.updated_at DESC,s.id) AS position
+        FROM plugin_memory_sources s JOIN plugin_memory_nodes n ON n.id=s.id WHERE {condition}");
+    let total = sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT count(*) FROM ({candidates}) candidates WHERE position=1"
+    ))
+    .bind(&space.id)
+    .bind(&query.status)
+    .bind(&pattern)
+    .bind(query.distinct)
+    .fetch_one(&mut *transaction)
+    .await?;
+    let ids = sqlx::query_scalar::<_, String>(&format!("SELECT id FROM ({candidates}) candidates WHERE position=1 ORDER BY updated_at DESC,id LIMIT $5 OFFSET $6"))
         .bind(&space.id)
-        .bind(&query.status).bind(&pattern).bind(query.limit).bind(query.offset)
+        .bind(&query.status).bind(&pattern).bind(query.distinct).bind(query.limit).bind(query.offset)
         .fetch_all(&mut *transaction)
         .await?;
     let truncated = query.offset.saturating_add(ids.len() as i64) < total;

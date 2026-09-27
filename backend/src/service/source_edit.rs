@@ -25,6 +25,7 @@ pub async fn update(
     }
     let mut transaction = service.pool.begin().await?;
     let space = require_node_space(&mut transaction, &context, &id, true).await?;
+    super::source_dedup::lock(&mut transaction, &space.id, &context.user_id).await?;
     // 与后台提交保持相同锁顺序，避免旧租约覆盖刚编辑的来源。
     sqlx::query("SELECT id FROM plugin_memory_tasks WHERE id=$1 FOR UPDATE")
         .bind(&id)
@@ -41,6 +42,15 @@ pub async fn update(
     if source.version != request.version {
         return Err(MemoryError::Stale);
     }
+    super::source_dedup::reject_duplicate(
+        &service,
+        &mut transaction,
+        &space.id,
+        &context.user_id,
+        &request.text,
+        Some(&id),
+    )
+    .await?;
 
     let mut isolated = isolate(&request.text, &[]);
     let existing =
