@@ -145,6 +145,51 @@ try {
   await expect(frame.getByRole("dialog")).toHaveCount(0);
   await expect(frame.locator(".memory-note").filter({ hasText: "导入后立即显示" })).toBeVisible();
 
+  await frame.getByRole("tab", { name: "SSH", exact: true }).click();
+  await expect(frame.getByRole("heading", { name: "SSH 连接", exact: true })).toBeVisible();
+  await expect(frame.getByText("暂无 SSH 主机", { exact: true })).toBeVisible();
+  await frame.getByRole("button", { name: "添加主机", exact: true }).click();
+  const sshDialog = frame.getByRole("dialog");
+  await expect(sshDialog.getByRole("heading", { name: "添加 SSH 主机", exact: true })).toBeVisible();
+  await sshDialog.getByRole("textbox", { name: "Alias", exact: true }).fill("okm");
+  await sshDialog.getByRole("textbox", { name: "主机地址", exact: true }).fill("61.163.60.13");
+  await sshDialog.getByRole("textbox", { name: "用户", exact: true }).fill("root");
+  await sshDialog.getByRole("combobox", { name: "配对设备" }).selectOption("11111111-1111-4111-8111-111111111111");
+  await sshDialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(frame.getByRole("dialog")).toHaveCount(0);
+  const sshRow = frame.locator(".memory-ssh__row");
+  await expect(sshRow).toHaveCount(1);
+  await expect(sshRow).toContainText("ssh okm");
+  await expect(sshRow).toContainText("root@61.163.60.13:22");
+  await expect(sshRow).toContainText("待写入");
+  await sshRow.getByRole("button", { name: "写入设备", exact: true }).click();
+  await expect(sshRow).toContainText("已写入");
+  await sshRow.getByRole("button", { name: "验证免密", exact: true }).click();
+  await expect(sshRow).toContainText("免密通过");
+  await expect(frame.getByRole("dialog").getByRole("heading", { name: "本机 SSH 公钥", exact: true })).toBeVisible();
+  await expect(frame.getByRole("dialog").getByRole("textbox")).toHaveValue(/ssh-ed25519 /);
+  await frame.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
+  await geometry();
+  await page.screenshot({ path: "test-results/memory-ssh.png" });
+  await sshRow.getByRole("button", { name: "编辑 SSH 主机", exact: true }).click();
+  await frame.getByRole("textbox", { name: "Alias", exact: true }).fill("okm;rm -rf");
+  await frame.getByRole("dialog").getByRole("button", { name: "保存", exact: true }).click();
+  await expect(frame.getByRole("dialog").getByText(/SSH 别名只能包含/)).toBeVisible();
+  await frame.getByRole("textbox", { name: "Alias", exact: true }).fill("okm");
+  await frame.getByRole("dialog").getByRole("button", { name: "取消", exact: true }).click();
+  await sshRow.getByRole("button", { name: "删除 SSH 主机", exact: true }).click();
+  await frame.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(frame.locator(".memory-ssh__row")).toHaveCount(0);
+  await expect(frame.getByText("暂无 SSH 主机", { exact: true })).toBeVisible();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await geometry();
+    await page.screenshot({ path: `test-results/memory-ssh-mobile-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await frame.getByRole("tab", { name: "随心记", exact: true }).click();
+  await expect(frame.locator(".memory-note").first()).toBeVisible();
+
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await geometry();

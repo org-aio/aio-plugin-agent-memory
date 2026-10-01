@@ -101,6 +101,17 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
             post(crate::service::secrets::reveal),
         )
         .route("/secrets/{id}/grants", put(crate::service::secrets::grant))
+        .route(
+            "/ssh/hosts",
+            get(crate::service::ssh::list).post(crate::service::ssh::create),
+        )
+        .route(
+            "/ssh/hosts/{id}",
+            put(crate::service::ssh::update).delete(crate::service::ssh::delete),
+        )
+        .route("/ssh/hosts/{id}/apply", post(crate::service::ssh::apply))
+        .route("/ssh/hosts/{id}/verify", post(crate::service::ssh::verify))
+        .route("/ssh/devices", get(crate::service::ssh::devices))
         .route("/tasks/claim", post(crate::service::queue::claim))
         .route("/tasks/{id}/submit", post(crate::service::queue::submit))
         .route("/tasks/{id}/fail", post(crate::service::queue::fail))

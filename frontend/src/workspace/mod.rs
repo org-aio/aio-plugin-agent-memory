@@ -3,6 +3,7 @@ mod graph_view;
 mod inspector;
 mod notes;
 mod panels;
+mod ssh;
 
 use crate::state::{self, MemoryState, View};
 use az_ui_components::{
@@ -12,7 +13,7 @@ use az_ui_components::{
 };
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    BookOpen, Database, KeyRound, ListChecks, Network, NotebookPen, Plus, RefreshCw,
+    BookOpen, Database, KeyRound, ListChecks, Network, NotebookPen, Plus, RefreshCw, Terminal,
 };
 
 #[component]
@@ -77,6 +78,7 @@ pub fn MemoryWorkspace() -> Element {
                 ViewButton { view: View::Graph, current, icon: rsx! { Network { size: "16px" } } }
                 ViewButton { view: View::Sources, current, icon: rsx! { Database { size: "16px" } } }
                 ViewButton { view: View::Credentials, current, icon: rsx! { KeyRound { size: "16px" } } }
+                ViewButton { view: View::Ssh, current, icon: rsx! { Terminal { size: "16px" } } }
                 ViewButton { view: View::Pending, current, icon: rsx! { ListChecks { size: "16px" } } }
             }
             if let Some(error) = state.read().error.clone() {
@@ -95,6 +97,7 @@ pub fn MemoryWorkspace() -> Element {
                             View::Graph => rsx! { graph_view::GraphPanel {} },
                             View::Sources => rsx! { panels::SourcesPanel {} },
                             View::Credentials => rsx! { panels::CredentialsPanel {} },
+                            View::Ssh => rsx! { ssh::SshPanel {} },
                             View::Pending => rsx! { panels::PendingPanel {} },
                         }
                     }

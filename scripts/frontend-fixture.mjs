@@ -31,6 +31,10 @@ function installFixture() {
   };
   let serial = 100;
   const requests = new Map();
+  window.__memorySshHosts = [];
+  window.__memorySshDevices = [
+    { id: "11111111-1111-4111-8111-111111111111", label: "本机 Worker", platform: "macOS", status: "active", lastSeen: Date.now() },
+  ];
   window.aioPlugin = {
     async json(method, path, body) {
       window.__memoryCalls.push({ method, path, body });
@@ -47,6 +51,52 @@ function installFixture() {
       ];
       if (route === "/graph") return { nodes: [], edges: [], total: 0, truncated: false };
       if (route === "/secrets") return [];
+      const sshAlias = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
+      if (route === "/ssh/devices") return window.__memorySshDevices;
+      if (route === "/ssh/hosts" && method === "GET") return window.__memorySshHosts;
+      if (route === "/ssh/hosts" && method === "POST") {
+        if (readonly) throw new Error("当前空间只读");
+        if (!sshAlias.test(body.alias)) throw new Error("SSH 别名只能包含字母、数字、点、下划线和连字符");
+        if (window.__memorySshHosts.some((host) => host.alias === body.alias)) throw new Error("该 SSH 别名已存在");
+        const host = {
+          id: `ssh-${serial++}`, alias: body.alias, hostname: body.hostname, user: body.user,
+          port: body.port, identityFile: body.identityFile, deviceId: body.deviceId,
+          deviceLabel: window.__memorySshDevices.find((item) => item.id === body.deviceId)?.label || "",
+          status: "draft", lastError: null, version: 1, updatedAt: Date.now(),
+        };
+        window.__memorySshHosts.unshift(host);
+        return host;
+      }
+      const sshHost = route.match(/^\/ssh\/hosts\/([^/]+)(\/(apply|verify))?$/);
+      if (sshHost) {
+        const host = window.__memorySshHosts.find((item) => item.id === sshHost[1]);
+        if (!host) throw new Error("记录不存在");
+        if (readonly) throw new Error("当前空间只读");
+        if (method === "PUT") {
+          if (body.version !== host.version) throw new Error("版本已变化");
+          if (!sshAlias.test(body.alias)) throw new Error("SSH 别名只能包含字母、数字、点、下划线和连字符");
+          Object.assign(host, {
+            alias: body.alias, hostname: body.hostname, user: body.user, port: body.port,
+            identityFile: body.identityFile, deviceId: body.deviceId,
+            deviceLabel: window.__memorySshDevices.find((item) => item.id === body.deviceId)?.label || "",
+            status: "draft", lastError: null, version: host.version + 1, updatedAt: Date.now(),
+          });
+          return host;
+        }
+        if (method === "DELETE") {
+          window.__memorySshHosts = window.__memorySshHosts.filter((item) => item.id !== host.id);
+          return null;
+        }
+        if (sshHost[3] === "apply") {
+          Object.assign(host, { status: "applied", lastError: null, version: host.version + 1, updatedAt: Date.now() });
+          return { host, message: "已写入配对设备", publicKey: null };
+        }
+        if (sshHost[3] === "verify") {
+          const already = host.status === "verified";
+          if (!already) Object.assign(host, { status: "verified", lastError: null, version: host.version + 1, updatedAt: Date.now() });
+          return { host, message: "免密连接验证通过", publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureKeyForAcceptanceTest fixture@localhost" };
+        }
+      }
       if (route === "/sources") {
         const q = (url.searchParams.get("query") || "").toLowerCase();
         const status = url.searchParams.get("status");

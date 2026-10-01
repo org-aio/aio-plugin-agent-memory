@@ -24,7 +24,7 @@ A standalone full-stack memory plugin: a Dioxus graph UI + Rust process backend 
 - 对话、速记与导入共用秘密隔离规则，保留加密原文、净化来源、wiki 三层数据；密码和 Token 替换成独立加密字段的不可猜测引用。疑似但无法可靠拆分的资料保密暂存。
 - 个人/团队空间、管理者/编辑者/阅读者、提交者原文权限及秘密单独授权。工作进程不能调用原文或秘密展示接口。
 - 持久租约、退避重试、抢占暂停、模型绑定、wiki 自动修订、别名、来源版本依据、冲突待核实和历史回退。模型提交和任务状态在同一事务提交，过期或重复租约不会重复生成知识。
-- 工作台提供 Wiki、图谱、来源、凭据和待整理视图；原对话可补充“上一条是密码”等明确说明，把保密暂存的整段资料作为秘密继续处理。
+- 工作台提供 Wiki、图谱、来源、凭据、SSH 和待整理视图；SSH 视图通过配对设备维护 `~/.ssh/config` 托管块，建立类似 `ssh okm` 的免密 alias，私钥和密码不离开设备；原对话可补充“上一条是密码”等明确说明，把保密暂存的整段资料作为秘密继续处理。
 - 共享层提供无模型的保守对话分类器，明确查找直接召回净化摘录，保存仅排后台整理，复杂或不明确输入交给 Agent 模型。查找来源标为 recorded，保留加密原文和对话依据，不进入普通图谱、检索或 wiki 整理队列。
 - `/route` 返回本轮直接命中与上下文节点，`/activation` 提供优先包含激活邻域的受控图谱，供 Agent 聊天联动使用。
 
@@ -37,7 +37,7 @@ A standalone full-stack memory plugin: a Dioxus graph UI + Rust process backend 
 - Conversations, quick notes and imports share the same secret-isolation rules, keeping three layers — encrypted originals, sanitized sources and wiki — with passwords and tokens replaced by unguessable references in separate encrypted fields. Material suspected of containing secrets but not reliably splittable is held in secure quarantine.
 - Personal/team spaces, manager/editor/reader roles, submitter original-text permissions and separate secret authorization. Worker processes cannot call original-text or secret-display interfaces.
 - Persistent leases, backoff retries, preemption pauses, model binding, wiki auto-revision, aliases, source-version evidence, pending conflicts and history rollback. Model submission and task state commit in one transaction; expired or duplicate leases never regenerate knowledge.
-- The workbench provides Wiki, Graph, Sources, Credentials and Pending-Organization views; the original conversation can add explicit notes such as “上一条是密码” (the previous message is a password) to keep treating an entire quarantined passage as a secret.
+- The workbench provides Wiki, Graph, Sources, Credentials, SSH and Pending-Organization views; the SSH view maintains a managed `~/.ssh/config` block on a paired device to create passwordless aliases such as `ssh okm`, keeping private keys and passwords on the device; the original conversation can add explicit notes such as “上一条是密码” (the previous message is a password) to keep treating an entire quarantined passage as a secret.
 - The shared layer provides a model-free conservative conversation classifier: explicit lookups directly recall sanitized excerpts, saves only queue background organization, and complex or ambiguous input goes to the Agent model. Lookup sources are marked `recorded`, keeping encrypted originals and conversation evidence without entering normal graph, retrieval or wiki-organization queues.
 - `/route` returns this turn's direct hits and context nodes; `/activation` provides a controlled graph that preferentially includes the activation neighborhood, for Agent chat integration.
 

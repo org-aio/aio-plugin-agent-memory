@@ -3,7 +3,7 @@
 .memory-app svg, .memory-dialog svg { flex: 0 0 auto; }
 .memory-header { display: flex; align-items: center; gap: 20px; padding-bottom: 16px; }
 .memory-header h1 { font-size: 20px; line-height: 28px; font-weight: 650; margin: 0; letter-spacing: 0; }
-.memory-space { width: 184px; min-width: 0; }
+.memory-space { width: 184px; min-width: 132px; }
 .memory-header__actions { display: flex; gap: 8px; margin-left: auto; }
 .memory-tabs { display: flex; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .memory-tabs .dx-button { border-radius: 4px; white-space: nowrap; }
@@ -48,6 +48,39 @@
 .memory-note .dx-markdown > * { margin-bottom: 10px; }
 .memory-note__footer { display: flex; justify-content: flex-end; margin-top: 4px; }
 .memory-note__footer .dx-button { font-size: 12px; padding-right: 0; }
+.memory-ssh { display: grid; gap: 16px; }
+.memory-ssh__header { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.memory-ssh__header h2 { font-size: 16px; font-weight: 600; line-height: 24px; margin: 0; }
+.memory-ssh__header p { margin: 4px 0 0; font-size: 12px; line-height: 18px; color: var(--muted-foreground); max-width: 560px; }
+.memory-ssh__header .dx-button { margin-left: auto; }
+.memory-ssh__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.memory-ssh__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; min-width: 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.memory-ssh__identity { min-width: 0; }
+.memory-ssh__alias { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 600; }
+.memory-ssh__alias code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-ssh__target { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--secondary-foreground); overflow-wrap: anywhere; }
+.memory-ssh__device { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; line-height: 18px; color: var(--muted-foreground); min-width: 0; }
+.memory-ssh__device > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-ssh__status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.memory-ssh__error { max-width: 180px; font-size: 12px; line-height: 16px; color: var(--destructive); text-align: right; overflow-wrap: anywhere; }
+.memory-ssh__actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.memory-ssh__actions > :nth-child(1) { margin-left: auto; }
+.memory-ssh-form { display: grid; gap: 12px; padding: 12px 2px; }
+.memory-ssh-form__split { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 12px; }
+.memory-ssh-form__field { display: grid; gap: 6px; font-size: 12px; line-height: 18px; color: var(--secondary-foreground); }
+.memory-ssh-form__field select, .memory-ssh-form__field textarea { width: 100%; min-height: 36px; padding: 8px 10px; color: var(--foreground); border: 1px solid var(--input); border-radius: 6px; background: var(--card); font: inherit; }
+.memory-ssh-form__field textarea { min-height: 120px; line-height: 1.6; overflow-wrap: anywhere; resize: vertical; }
+.memory-ssh-dialog.dx-dialog { max-width: min(520px, calc(100% - 32px)); }
+@media (max-width: 840px) {
+  .memory-ssh__list { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .memory-ssh__header .dx-button { margin-left: 0; }
+  .memory-ssh__actions { flex-wrap: wrap; }
+  .memory-ssh__actions > :nth-child(1) { margin-left: 0; }
+  .memory-ssh__error { max-width: 100%; text-align: left; }
+}
+
 .memory-app .dx-markdown pre, .memory-dialog .dx-markdown pre { background: var(--muted); border-color: var(--border); }
 .memory-app .dx-markdown :not(pre)>code, .memory-dialog .dx-markdown :not(pre)>code { background: var(--muted); }
 .memory-app .dx-markdown th, .memory-app .dx-markdown td, .memory-dialog .dx-markdown th, .memory-dialog .dx-markdown td { border-color: var(--border); }

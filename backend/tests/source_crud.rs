@@ -97,6 +97,7 @@ async fn source_crud_preserves_isolation_permissions_versions_and_leases() -> Re
         include_str!("../migrations/0003_aliases.sql"),
         include_str!("../migrations/0004_source_versions.sql"),
         include_str!("../migrations/0005_recorded_queries.sql"),
+        include_str!("../migrations/0006_ssh.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -111,7 +112,9 @@ async fn source_crud_preserves_isolation_permissions_versions_and_leases() -> Re
     let service = Arc::new(MemoryService::new(
         pool.clone(),
         Cryptography::new(Some(socket.clone()), Some("test-only".into())),
-    ));
+        None,
+        None,
+    )?);
     // 子任务捕获断言失败，确保本次拥有的 schema 和 socket 仍能清理。
     let outcome = tokio::spawn(run_cases(service, pool.clone())).await;
     pool.close().await;

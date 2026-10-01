@@ -9,3 +9,4 @@ node_modules/
 test-results/
 dev/target/
 .local/
+/target/

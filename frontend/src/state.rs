@@ -1,7 +1,7 @@
 use crate::transport;
 use az_memory_model::{
     CompilationResult, MemoryGraph, MemoryNode, MemorySpace, NodeDraft, NodeKind, SearchRequest,
-    SecretSummary, SourceView,
+    SecretSummary, SourceView, SshApplyResult, SshDevice, SshHost, SshHostDraft,
 };
 use dioxus::prelude::*;
 use serde_json::json;
@@ -13,6 +13,7 @@ pub enum View {
     Graph,
     Sources,
     Credentials,
+    Ssh,
     Pending,
 }
 
@@ -24,6 +25,7 @@ impl View {
             Self::Graph => "图谱",
             Self::Sources => "来源",
             Self::Credentials => "凭据",
+            Self::Ssh => "SSH",
             Self::Pending => "待整理",
         }
     }
@@ -36,6 +38,8 @@ pub struct MemoryState {
     pub graph: MemoryGraph,
     pub sources: Vec<SourceView>,
     pub secrets: Vec<SecretSummary>,
+    pub ssh_hosts: Vec<SshHost>,
+    pub ssh_devices: Vec<SshDevice>,
     pub selected: Option<MemoryNode>,
     pub revisions: Vec<az_memory_model::WikiRevision>,
     pub proposal: Option<CompilationResult>,
@@ -59,6 +63,8 @@ impl Default for MemoryState {
             },
             sources: Vec::new(),
             secrets: Vec::new(),
+            ssh_hosts: Vec::new(),
+            ssh_devices: Vec::new(),
             selected: None,
             revisions: Vec::new(),
             proposal: None,
@@ -98,17 +104,31 @@ pub async fn load(mut state: Signal<MemoryState>) {
             transport::space_request("GET", "/sources", space_id.as_deref(), json!(null)).await?;
         let secrets: Vec<SecretSummary> =
             transport::space_request("GET", "/secrets", space_id.as_deref(), json!(null)).await?;
-        Ok::<_, String>((spaces, space_id, graph, sources.sources, secrets))
+        let ssh_hosts: Vec<SshHost> = transport::request("GET", "/ssh/hosts", json!(null)).await?;
+        let ssh_devices: Vec<SshDevice> = transport::request("GET", "/ssh/devices", json!(null))
+            .await
+            .unwrap_or_default();
+        Ok::<_, String>((
+            spaces,
+            space_id,
+            graph,
+            sources.sources,
+            secrets,
+            ssh_hosts,
+            ssh_devices,
+        ))
     }
     .await;
     match result {
-        Ok((spaces, space_id, graph, sources, secrets)) => {
+        Ok((spaces, space_id, graph, sources, secrets, ssh_hosts, ssh_devices)) => {
             let mut value = state.write();
             value.spaces = spaces;
             value.space_id = space_id;
             value.graph = graph;
             value.sources = sources;
             value.secrets = secrets;
+            value.ssh_hosts = ssh_hosts;
+            value.ssh_devices = ssh_devices;
             value.error = None;
         }
         Err(error) => state.write().error = Some(error),
@@ -131,20 +151,107 @@ pub async fn refresh(mut state: Signal<MemoryState>) {
             transport::space_request("GET", "/sources", space_id.as_deref(), json!(null)).await?;
         let secrets: Vec<SecretSummary> =
             transport::space_request("GET", "/secrets", space_id.as_deref(), json!(null)).await?;
-        Ok::<_, String>((graph, sources.sources, secrets))
+        let ssh_hosts: Vec<SshHost> = transport::request("GET", "/ssh/hosts", json!(null)).await?;
+        let ssh_devices: Vec<SshDevice> = transport::request("GET", "/ssh/devices", json!(null))
+            .await
+            .unwrap_or_default();
+        Ok::<_, String>((graph, sources.sources, secrets, ssh_hosts, ssh_devices))
     }
     .await;
     match result {
-        Ok((graph, sources, secrets)) => {
+        Ok((graph, sources, secrets, ssh_hosts, ssh_devices)) => {
             let mut value = state.write();
             value.graph = graph;
             value.sources = sources;
             value.secrets = secrets;
+            value.ssh_hosts = ssh_hosts;
+            value.ssh_devices = ssh_devices;
             value.error = None;
         }
         Err(error) => state.write().error = Some(error),
     }
     state.write().busy = false;
+}
+
+pub async fn save_ssh_host(
+    mut state: Signal<MemoryState>,
+    id: Option<String>,
+    draft: SshHostDraft,
+) -> Result<SshHost, String> {
+    let body = serde_json::to_value(draft).map_err(|error| error.to_string())?;
+    let result = match id {
+        Some(id) => transport::request::<SshHost>("PUT", &format!("/ssh/hosts/{id}"), body).await,
+        None => transport::request::<SshHost>("POST", "/ssh/hosts", body).await,
+    };
+    match result {
+        Ok(host) => {
+            state.write().notice = Some("SSH 主机配置已保存".into());
+            refresh(state).await;
+            Ok(host)
+        }
+        Err(error) => {
+            state.write().error = Some(error.clone());
+            Err(error)
+        }
+    }
+}
+
+pub async fn delete_ssh_host(mut state: Signal<MemoryState>, id: String) -> Result<(), String> {
+    match transport::request::<serde_json::Value>(
+        "DELETE",
+        &format!("/ssh/hosts/{id}"),
+        json!(null),
+    )
+    .await
+    {
+        Ok(_) => {
+            state.write().notice = Some("已删除 SSH 主机和设备配置".into());
+            refresh(state).await;
+            Ok(())
+        }
+        Err(error) => {
+            state.write().error = Some(error.clone());
+            Err(error)
+        }
+    }
+}
+
+pub async fn apply_ssh_host(
+    state: Signal<MemoryState>,
+    id: String,
+) -> Result<SshApplyResult, String> {
+    ssh_action(state, &id, "apply").await
+}
+
+pub async fn verify_ssh_host(
+    state: Signal<MemoryState>,
+    id: String,
+) -> Result<SshApplyResult, String> {
+    ssh_action(state, &id, "verify").await
+}
+
+async fn ssh_action(
+    mut state: Signal<MemoryState>,
+    id: &str,
+    action: &str,
+) -> Result<SshApplyResult, String> {
+    match transport::request::<SshApplyResult>(
+        "POST",
+        &format!("/ssh/hosts/{id}/{action}"),
+        json!(null),
+    )
+    .await
+    {
+        Ok(result) => {
+            state.write().notice = Some(result.message.clone());
+            refresh(state).await;
+            Ok(result)
+        }
+        Err(error) => {
+            state.write().error = Some(error.clone());
+            Err(error)
+        }
+    }
 }
 
 pub async fn search(mut state: Signal<MemoryState>) {

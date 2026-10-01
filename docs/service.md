@@ -42,6 +42,18 @@
 
 角色为 OWNER/EDITOR/READER。普通空间管理员不自动获得原文或秘密权限。原文默认只允许提交者读取，秘密所有者或被单独授权者可查看；后台工作身份不能读取明文。将授权布尔值设为 false 可撤销相应权限。
 
+## SSH 连接
+
+| 方法 | 路径 | 契约 |
+|---|---|---|
+| GET/POST | `/ssh/hosts` | 交互式编辑者列出或新建 SSH 主机元数据 |
+| PUT/DELETE | `/ssh/hosts/{id}` | 更新或删除；删除会先让配对设备移除托管配置块，失败则保留记录 |
+| GET | `/ssh/devices` | 通过宿主 `POST /workers` 列出已授权 `ssh.manage` 的配对设备 |
+| POST | `/ssh/hosts/{id}/apply` | 将 alias、主机、用户、端口和身份文件名写入设备 `~/.ssh/config` 托管块，状态置 applied |
+| POST | `/ssh/hosts/{id}/verify` | 确保设备存在本机 Ed25519 密钥，再以 `BatchMode=yes` 校验免密登录，返回公钥 |
+
+主机记录只保存 alias、主机、用户、端口、身份文件名和配对设备标识，不保存私钥、密码或设备令牌。调用经宿主 Unix socket 转发到配对设备，设备端只接受 `inspect`、`upsert`、`remove`、`ensure-key`、`verify` 固定动作；不接收任意 shell。首次向远端安装公钥仍需用户在设备终端用 `ssh-copy-id` 完成。
+
 ## 知识与检索
 
 | 方法 | 路径 | 契约 |
