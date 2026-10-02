@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, Query, State},
     routing::post,
 };
-use az_memory_model::{CaptureRequest, SourceQuery, SourceUpdate, TaskFailure};
+use az_memory_model::{AttachmentDraft, CaptureRequest, SourceQuery, SourceUpdate, TaskFailure};
 use az_memory_server::{
     cryptography::Cryptography,
     model::MemoryContext,
@@ -98,6 +98,7 @@ async fn source_crud_preserves_isolation_permissions_versions_and_leases() -> Re
         include_str!("../migrations/0004_source_versions.sql"),
         include_str!("../migrations/0005_recorded_queries.sql"),
         include_str!("../migrations/0006_ssh.sql"),
+        include_str!("../migrations/0007_attachments.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -151,6 +152,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
             origin: "note".into(),
             reference: String::new(),
             clarifies: None,
+            images: Vec::new(),
         }),
     )
     .await
@@ -158,6 +160,47 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
     .0;
     assert!(captured.can_edit && captured.can_delete);
     assert!(!captured.text.contains("test-canary"));
+    let png = b"\x89PNG\r\n\x1a\n";
+    let png_url = format!("data:image/png;base64,{}", STANDARD.encode(png));
+    let image_only = service::intake::capture(
+        State(service.clone()),
+        owner.clone(),
+        Json(CaptureRequest {
+            request_id: "image-only-1".into(),
+            text: String::new(),
+            space_id: Some(space.clone()),
+            origin: "note".into(),
+            reference: String::new(),
+            clarifies: None,
+            images: vec![AttachmentDraft {
+                filename: "截图.png".into(),
+                content_type: "image/png".into(),
+                data_url: png_url.clone(),
+            }],
+        }),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert_eq!(image_only.title, "截图.png");
+    assert_eq!(image_only.attachments.len(), 1);
+    assert_eq!(image_only.attachments[0].filename, "截图.png");
+    assert_eq!(image_only.attachments[0].size_bytes, png.len() as i64);
+    let attachment = service::intake::attachment(
+        State(service.clone()),
+        Path((image_only.id.clone(), image_only.attachments[0].id.clone())),
+        owner.clone(),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert_eq!(attachment.data_url, png_url);
+    let stored_image: Vec<u8> =
+        sqlx::query_scalar("SELECT ciphertext FROM plugin_memory_attachments WHERE source_id=$1")
+            .bind(&image_only.id)
+            .fetch_one(&pool)
+            .await?;
+    assert_ne!(stored_image, png);
     let secret = &captured.secrets[0].id;
     let ciphertext: Vec<u8> =
         sqlx::query_scalar("SELECT ciphertext FROM plugin_memory_sources WHERE id=$1")
@@ -312,6 +355,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
                 origin: "note".into(),
                 reference: String::new(),
                 clarifies: None,
+                images: Vec::new(),
             }),
         )
         .await

@@ -17,7 +17,9 @@ pub mod store;
 pub use access::{MemoryError, Result};
 pub use context::MemoryContext;
 pub use graph::{activation, context, graph, recall, route, search, visibility};
-pub use intake::{capture, get as source_get, import, list as source_list, original, retry};
+pub use intake::{
+    attachment, capture, get as source_get, import, list as source_list, original, retry,
+};
 pub use nodes::{create_edge, delete, delete_edge, edges, get, revisions, rollback, sources};
 pub use queue::{claim, fail, proposal, resolve, source_proposal, submit};
 pub use secrets::{grant, list as secrets_list, reveal};

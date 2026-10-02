@@ -1,3 +1,4 @@
+pub(super) mod attachments;
 mod composer;
 mod dialogs;
 mod item;
@@ -17,6 +18,7 @@ use std::collections::BTreeMap;
 pub struct Draft {
     pub text: String,
     pub request_id: String,
+    pub images: Vec<attachments::DraftAttachment>,
 }
 
 impl Default for Draft {
@@ -24,6 +26,7 @@ impl Default for Draft {
         Self {
             text: String::new(),
             request_id: uuid::Uuid::new_v4().to_string(),
+            images: Vec::new(),
         }
     }
 }

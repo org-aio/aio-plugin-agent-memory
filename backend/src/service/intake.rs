@@ -12,10 +12,12 @@ use axum::{
     extract::{Path, Query, State},
 };
 use az_memory_model::{
-    CaptureRequest, ImportRequest, ImportResult, NodeDraft, NodeKind, RevealedSecret, SourceList,
-    SourceQuery, SourceView,
+    AttachmentData, AttachmentDraft, AttachmentSummary, CaptureRequest, ImportRequest,
+    ImportResult, NodeDraft, NodeKind, RevealedSecret, SourceList, SourceQuery, SourceView,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use regex::Regex;
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::Arc;
 
@@ -27,6 +29,7 @@ pub async fn capture(
     Json(request): Json<CaptureRequest>,
 ) -> Result<Json<SourceView>> {
     validate_capture(&request)?;
+    let images = attachment_bytes(&request.images)?;
     let mut transaction = service.pool.begin().await?;
     let space = require_space(
         &mut transaction,
@@ -58,12 +61,28 @@ pub async fn capture(
         if original != request.text.as_bytes() {
             return Err(MemoryError::Input("同一请求 ID 不能提交不同内容".into()));
         }
+        let stored_hashes = sqlx::query_scalar::<_, String>(
+            "SELECT sha256 FROM plugin_memory_attachments WHERE source_id=$1 ORDER BY created_at,id",
+        )
+        .bind(&id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let submitted_hashes = images
+            .iter()
+            .map(|image| image.sha256.clone())
+            .collect::<Vec<_>>();
+        if stored_hashes != submitted_hashes {
+            return Err(MemoryError::Input("同一请求 ID 不能提交不同图片".into()));
+        }
         let source = source_view(&mut transaction, &context, &id).await?;
         transaction.commit().await?;
         return Ok(Json(source));
     }
     // 聊天轮次保留独立来源与澄清关联；随心记和资料导入拒绝重复新增。
-    if request.origin != "chat" && request.clarifies.is_none() {
+    if request.origin != "chat"
+        && request.clarifies.is_none()
+        && !(request.text.trim().is_empty() && !request.images.is_empty())
+    {
         super::source_dedup::reject_duplicate(
             &service,
             &mut transaction,
@@ -77,6 +96,12 @@ pub async fn capture(
     let isolated = isolate(&request.text, &[]);
     let title = if isolated.quarantined {
         "待整理的保密资料".to_owned()
+    } else if isolated.text.trim().is_empty() {
+        request
+            .images
+            .first()
+            .map(|image| image.filename.chars().take(100).collect())
+            .unwrap_or_else(|| "图片记录".to_owned())
     } else {
         source_title(&isolated.text)
     };
@@ -139,6 +164,30 @@ pub async fn capture(
             .bind(&secret.label)
             .bind(ciphertext)
             .bind(&context.user_id)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    for image in &images {
+        let attachment_id = access::id();
+        let ciphertext = service
+            .crypto
+            .seal(
+                &format!("{}/attachment/{}", space.id, attachment_id),
+                &image.bytes,
+            )
+            .await
+            .map_err(MemoryError::storage)?;
+        sqlx::query("INSERT INTO plugin_memory_attachments(id,source_id,space_id,owner_id,filename,content_type,size_bytes,sha256,ciphertext,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+            .bind(&attachment_id)
+            .bind(&node.id)
+            .bind(&space.id)
+            .bind(&context.user_id)
+            .bind(&image.filename)
+            .bind(&image.content_type)
+            .bind(image.bytes.len() as i64)
+            .bind(&image.sha256)
+            .bind(ciphertext)
+            .bind(access::now())
             .execute(&mut *transaction)
             .await?;
     }
@@ -288,6 +337,45 @@ pub async fn get(
     Ok(Json(source))
 }
 
+pub async fn attachment(
+    State(service): State<Arc<MemoryService>>,
+    Path((id, attachment_id)): Path<(String, String)>,
+    context: MemoryContext,
+) -> Result<Json<AttachmentData>> {
+    access::require_id(&id)?;
+    access::require_id(&attachment_id)?;
+    let mut transaction = service.pool.begin().await?;
+    let source = source_view(&mut transaction, &context, &id).await?;
+    let row = sqlx::query("SELECT filename,content_type,ciphertext,owner_id FROM plugin_memory_attachments WHERE id=$1 AND source_id=$2 AND space_id=$3")
+        .bind(&attachment_id)
+        .bind(&id)
+        .bind(&source.space_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(MemoryError::Missing)?;
+    let owner_id: String = row.try_get(3)?;
+    if context.worker() || (owner_id != context.user_id && !source.can_delete) {
+        return Err(MemoryError::Access);
+    }
+    let filename: String = row.try_get(0)?;
+    let content_type: String = row.try_get(1)?;
+    let ciphertext: Vec<u8> = row.try_get(2)?;
+    let bytes = service
+        .crypto
+        .open(
+            &format!("{}/attachment/{}", source.space_id, attachment_id),
+            &ciphertext,
+        )
+        .await
+        .map_err(MemoryError::storage)?;
+    transaction.commit().await?;
+    Ok(Json(AttachmentData {
+        filename,
+        content_type: content_type.clone(),
+        data_url: format!("data:{};base64,{}", content_type, STANDARD.encode(bytes)),
+    }))
+}
+
 pub async fn original(
     State(service): State<Arc<MemoryService>>,
     Path(id): Path<String>,
@@ -368,6 +456,7 @@ pub async fn import(
         origin: "import".into(),
         reference: String::new(),
         clarifies: None,
+        images: Vec::new(),
     };
     let Json(source) = capture(State(service.clone()), context.clone(), Json(request)).await?;
     let mut transaction = service.pool.begin().await?;
@@ -400,6 +489,7 @@ pub(crate) async fn source_view(
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(MemoryError::Missing)?;
+    let attachments = attachments_in(transaction, &space.id, id).await?;
     Ok(SourceView {
         id: row.try_get(0)?,
         space_id: row.try_get(1)?,
@@ -416,7 +506,104 @@ pub(crate) async fn source_view(
             && !context.worker()
             && row.try_get::<String, _>(4)? == context.user_id,
         can_delete: space.role.can_write() && !context.worker(),
+        attachments,
     })
+}
+
+async fn attachments_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    space_id: &str,
+    source_id: &str,
+) -> Result<Vec<AttachmentSummary>> {
+    let rows = sqlx::query("SELECT id,source_id,filename,content_type,size_bytes,sha256,created_at FROM plugin_memory_attachments WHERE space_id=$1 AND source_id=$2 ORDER BY created_at,id")
+        .bind(space_id)
+        .bind(source_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(AttachmentSummary {
+                id: row.try_get(0)?,
+                source_id: row.try_get(1)?,
+                filename: row.try_get(2)?,
+                content_type: row.try_get(3)?,
+                size_bytes: row.try_get(4)?,
+                sha256: row.try_get(5)?,
+                created_at: row.try_get(6)?,
+            })
+        })
+        .collect()
+}
+
+struct AttachmentBytes {
+    filename: String,
+    content_type: String,
+    bytes: Vec<u8>,
+    sha256: String,
+}
+
+fn attachment_bytes(images: &[AttachmentDraft]) -> Result<Vec<AttachmentBytes>> {
+    if images.len() > 4 {
+        return Err(MemoryError::Input("一条记录最多添加 4 张图片".into()));
+    }
+    let parsed = images
+        .iter()
+        .map(|image| {
+            let filename = image.filename.trim();
+            if filename.is_empty()
+                || filename.chars().count() > 255
+                || filename.chars().any(char::is_control)
+            {
+                return Err(MemoryError::Input("图片文件名无效".into()));
+            }
+            let content_type = image.content_type.trim().to_ascii_lowercase();
+            if !matches!(
+                content_type.as_str(),
+                "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+            ) {
+                return Err(MemoryError::Input(
+                    "仅支持 PNG、JPEG、GIF 或 WebP 图片".into(),
+                ));
+            }
+            let (metadata, encoded) = image
+                .data_url
+                .strip_prefix("data:")
+                .and_then(|value| value.split_once(','))
+                .ok_or_else(|| MemoryError::Input("图片数据地址无效".into()))?;
+            if metadata != format!("{content_type};base64") {
+                return Err(MemoryError::Input("图片类型与数据不一致".into()));
+            }
+            let bytes = STANDARD
+                .decode(encoded)
+                .map_err(|_| MemoryError::Input("图片编码无效".into()))?;
+            if bytes.is_empty() || bytes.len() > 700_000 {
+                return Err(MemoryError::Input("单张图片不能超过 700 KB".into()));
+            }
+            if !image_signature_matches(&content_type, &bytes) {
+                return Err(MemoryError::Input("图片内容与格式不一致".into()));
+            }
+            Ok(AttachmentBytes {
+                filename: filename.to_owned(),
+                content_type,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+                bytes,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if parsed.iter().map(|image| image.bytes.len()).sum::<usize>() > 700_000 {
+        return Err(MemoryError::Input("图片总量不能超过 700 KB".into()));
+    }
+    Ok(parsed)
+}
+
+fn image_signature_matches(content_type: &str, bytes: &[u8]) -> bool {
+    match content_type {
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
+        "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "image/webp" => bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP",
+        _ => false,
+    }
 }
 
 pub(crate) fn source_title(text: &str) -> String {
@@ -467,12 +654,13 @@ fn wiki_links(text: &str) -> Vec<String> {
 }
 
 fn validate_capture(request: &CaptureRequest) -> Result<()> {
-    if request.text.trim().is_empty()
+    if (request.text.trim().is_empty() && request.images.is_empty())
         || request.text.as_bytes().len() > 100_000
         || request.request_id.is_empty()
         || request.request_id.len() > 160
         || !matches!(request.origin.as_str(), "chat" | "note" | "import")
         || request.reference.len() > 256
+        || request.images.len() > 4
     {
         return Err(MemoryError::Input("收件内容或来源无效".into()));
     }

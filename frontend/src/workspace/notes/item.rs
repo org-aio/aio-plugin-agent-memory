@@ -1,4 +1,4 @@
-use super::super::source_status;
+use super::{super::source_status, attachments::AttachmentViewer};
 use az_memory_model::SourceView;
 use az_ui_components::{
     button::{Button, ButtonSize, ButtonVariant},
@@ -51,6 +51,7 @@ pub(super) fn NoteItem(
                 }
             }
             div { class: "memory-note__preview", Markdown { source: source.text.clone(), link_base: "/", image_base: "/" } }
+            AttachmentViewer { id: source.id.clone(), attachments: source.attachments.clone() }
             footer { class: "memory-note__footer",
                 Button { size: ButtonSize::Sm, variant: ButtonVariant::Link,
                     onclick: { let id = source.id.clone(); move |_| on_open.call(id.clone()) }, "阅读全文" }

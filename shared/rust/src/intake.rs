@@ -14,6 +14,36 @@ pub struct CaptureRequest {
     pub reference: String,
     #[serde(default)]
     pub clarifies: Option<String>,
+    #[serde(default)]
+    pub images: Vec<AttachmentDraft>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentDraft {
+    pub filename: String,
+    pub content_type: String,
+    pub data_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentSummary {
+    pub id: String,
+    pub source_id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+    pub created_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentData {
+    pub filename: String,
+    pub content_type: String,
+    pub data_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -50,6 +80,8 @@ pub struct SourceView {
     pub can_edit: bool,
     #[serde(default)]
     pub can_delete: bool,
+    #[serde(default)]
+    pub attachments: Vec<AttachmentSummary>,
 }
 
 /// 来源修订必须携带预览时的版本，原文仍由收件管线隔离和加密。

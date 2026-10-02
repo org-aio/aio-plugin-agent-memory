@@ -167,6 +167,7 @@ version = "0.1.0"
 dependencies = [
  "az-memory-model",
  "az-ui-components",
+ "base64",
  "console_error_panic_hook",
  "dioxus",
  "dioxus-icons",
@@ -176,6 +177,7 @@ dependencies = [
  "serde_json",
  "uuid",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

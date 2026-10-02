@@ -23,6 +23,22 @@
 .memory-composer__modes [aria-pressed="true"] { background: var(--muted); }
 .memory-saved { font-size: 12px; color: var(--success); }
 .memory-composer__preview { min-height: 128px; max-height: 360px; overflow: auto; padding: 16px; }
+.memory-attachments { padding: 10px 12px; border-top: 1px solid var(--border); }
+.memory-attachments__head { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted-foreground); }
+.memory-attachments__pick { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--input); border-radius: 6px; color: var(--foreground); cursor: pointer; }
+.memory-attachments__pick input { display: none; }
+.memory-attachments__hint { margin-left: auto; }
+.memory-attachments__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+.memory-attachment { position: relative; display: flex; flex-direction: column; gap: 6px; margin: 0; min-width: 0; }
+.memory-attachment img, .memory-attachment__thumb { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--border); border-radius: 6px; background: var(--muted); overflow: hidden; }
+.memory-attachment__open { padding: 0; border: 0; background: none; cursor: zoom-in; }
+.memory-attachment__thumb { display: grid; place-items: center; color: var(--muted-foreground); font-size: 20px; }
+.memory-attachment figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted-foreground); }
+.memory-attachment > button:not(.memory-attachment__open) { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); cursor: pointer; }
+.memory-attachments__error { margin: 8px 0 0; font-size: 12px; color: var(--destructive); }
+.memory-attachment__lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; background: color-mix(in srgb, var(--background) 88%, transparent); cursor: zoom-out; }
+.memory-attachment__lightbox img { max-width: min(100%, 960px); max-height: 82dvh; object-fit: contain; border-radius: 8px; }
+.memory-attachment__lightbox span { font-size: 12px; color: var(--muted-foreground); }
 .memory-feed__toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .memory-feed__toolbar h2 { margin-right: auto; }
 .memory-search { display: flex; align-items: center; gap: 4px; width: 260px; max-width: 100%; }

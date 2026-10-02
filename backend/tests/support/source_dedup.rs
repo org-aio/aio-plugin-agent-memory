@@ -17,6 +17,7 @@ pub(super) async fn run(
                 origin: origin.into(),
                 reference: String::new(),
                 clarifies: None,
+                images: Vec::new(),
             }),
         )
     };
@@ -58,6 +59,7 @@ pub(super) async fn run(
                 origin: "note".into(),
                 reference: String::new(),
                 clarifies: None,
+                images: Vec::new(),
             }),
         )
         .await;
@@ -186,6 +188,7 @@ pub(super) async fn run(
                 origin: "note".into(),
                 reference: String::new(),
                 clarifies: None,
+                images: Vec::new(),
             }),
         )
         .await

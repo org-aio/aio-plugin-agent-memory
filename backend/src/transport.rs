@@ -86,6 +86,10 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
             "/sources/{id}/original",
             post(crate::service::intake::original),
         )
+        .route(
+            "/sources/{id}/attachments/{attachment_id}",
+            get(crate::service::intake::attachment),
+        )
         .route("/sources/{id}/retry", post(crate::service::intake::retry))
         .route(
             "/sources/{id}/proposal",

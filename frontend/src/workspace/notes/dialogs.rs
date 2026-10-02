@@ -1,4 +1,4 @@
-use super::{NotesState, item::time_label};
+use super::{NotesState, attachments::AttachmentViewer, item::time_label};
 use crate::{
     state::{self, MemoryState},
     transport,
@@ -36,7 +36,10 @@ pub(super) fn NoteDetail(
             DialogDescription { "完整记录" }
             match response {
                 Some(Ok(source)) => rsx! {
-                    div { class: "memory-dialog__body", Markdown { source: source.text.clone(), link_base: "/", image_base: "/" } }
+                    div { class: "memory-dialog__body",
+                        Markdown { source: source.text.clone(), link_base: "/", image_base: "/" }
+                        AttachmentViewer { id: source.id.clone(), attachments: source.attachments.clone() }
+                    }
                     footer { class: "memory-dialog__footer",
                         time { "{time_label(source.updated_at)}" }
                         if source.can_edit { Button { onclick: move |_| on_edit.call(source.clone()), Pencil { size: 16 } "编辑记录" } }

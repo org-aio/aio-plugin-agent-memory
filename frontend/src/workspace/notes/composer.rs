@@ -1,4 +1,4 @@
-use super::{Draft, NotesState};
+use super::{Draft, NotesState, attachments::AttachmentPicker};
 use crate::{
     state::{self, MemoryState},
     transport,
@@ -29,7 +29,8 @@ pub(super) fn Composer(on_saved: EventHandler<()>) -> Element {
         .iter()
         .any(|s| s.id == space && s.role.can_write());
     let saving = notes.read().saving;
-    let can_save = can_write && !saving && !draft.text.trim().is_empty();
+    let can_save =
+        can_write && !saving && (!draft.text.trim().is_empty() || !draft.images.is_empty());
     let save = Callback::new({
         let space = space.clone();
         move |_: ()| {
@@ -39,7 +40,7 @@ pub(super) fn Composer(on_saved: EventHandler<()>) -> Element {
             let Some(draft) = notes.peek().drafts.get(&space).cloned() else {
                 return;
             };
-            if draft.text.trim().is_empty() {
+            if draft.text.trim().is_empty() && draft.images.is_empty() {
                 return;
             }
             if draft.text.len() > 100_000 {
@@ -51,7 +52,13 @@ pub(super) fn Composer(on_saved: EventHandler<()>) -> Element {
             saved.set(false);
             let space = space.clone();
             spawn(async move {
-                let body = serde_json::json!({ "requestId": draft.request_id, "text": draft.text, "spaceId": space, "origin": "note" });
+                let body = serde_json::json!({
+                    "requestId": draft.request_id,
+                    "text": draft.text,
+                    "spaceId": space,
+                    "origin": "note",
+                    "images": draft.images.iter().map(|image| image.request()).collect::<Vec<_>>(),
+                });
                 match transport::request::<SourceView>("POST", "/capture", body).await {
                     Ok(_) => {
                         notes.write().drafts.remove(&space);
@@ -88,6 +95,14 @@ pub(super) fn Composer(on_saved: EventHandler<()>) -> Element {
                             }
                         },
                     }
+                }
+                AttachmentPicker {
+                    images: draft.images.clone(),
+                    disabled: saving || !can_write,
+                    on_change: { let space = space.clone(); move |images| {
+                        let mut value = notes.write(); let draft = value.drafts.entry(space.clone()).or_insert_with(Draft::default);
+                        if draft.images != images { draft.request_id = uuid::Uuid::new_v4().to_string(); draft.images = images; saved.set(false); }
+                    } },
                 }
                 footer { class: "memory-composer__footer",
                     div { class: "memory-composer__modes", role: "group", aria_label: "输入模式",
