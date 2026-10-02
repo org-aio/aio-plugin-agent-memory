@@ -18,7 +18,7 @@ A standalone full-stack memory plugin: a Dioxus graph UI + Rust process backend 
 - 笔记、概念、人物、事件、来源、项目统一为节点，正文保留 Markdown，标签用 JSONB 保存。
 - 有方向的关系、关系依据、双向关联与一层邻域；删除节点级联删除关系，操作前确认。
 - 导入 Markdown / 文本文件或粘贴正文，显式 `[[标题]]` 生成概念节点与「提及」边。
-- 随心记可直接选择或粘贴图片；单条最多 4 张、合计不超过 700 KB，原图独立加密保存，详情页按空间权限读取。
+- 随心记可直接选择图片；单条最多 4 张、合计不超过 700 KB，原图独立加密保存，详情页按空间权限读取。
 - 标题、正文和标签搜索；本地图谱筛选、拖动、平移、缩放、暂停与列表切换。
 - 上下文检索沿 0 至 3 层关系展开，返回正文、来源 URL、节点 ID 与关系，可供 LLM 客户端使用。
 - 编辑使用版本号拒绝过期覆盖；导入和关系写入在事务中完成。
@@ -31,7 +31,7 @@ A standalone full-stack memory plugin: a Dioxus graph UI + Rust process backend 
 
 - Notes, concepts, people, events, sources and projects are unified as nodes; bodies keep Markdown, and tags are stored as JSONB.
 - Directed relations, relation evidence, bidirectional links and a one-hop neighborhood; deleting a node cascades its relations, with confirmation before the operation.
-- Quick notes accept selected or pasted images; up to four images and 700 KB total per note, stored as separately encrypted originals and read through space permissions.
+- Quick notes accept selected images; up to four images and 700 KB total per note, stored as separately encrypted originals and read through space permissions.
 - Import Markdown/text files or paste bodies; explicit `[[标题]]` generates concept nodes and “提及” (mentions) edges.
 - Search over titles, bodies and tags; local graph filtering, drag, pan, zoom, pause and list switching.
 - Context retrieval expands along 0 to 3 hops of relations and returns bodies, source URLs, node IDs and relations, ready for LLM clients.
