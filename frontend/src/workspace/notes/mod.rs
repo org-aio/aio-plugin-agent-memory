@@ -89,6 +89,18 @@ pub fn Notes() -> Element {
         )
         .await
     }));
+    // 仅当前可见的随心记页刷新；保留草稿、筛选、分页及已显示列表。
+    use_future(move || async move {
+        loop {
+            gloo_timers::future::TimeoutFuture::new(3000).await;
+            let visible = web_sys::window()
+                .and_then(|window| window.document())
+                .is_some_and(|document| !document.hidden());
+            if visible && results.finished() {
+                results.restart();
+            }
+        }
+    });
     let response = results.read().clone();
     let loading = !results.finished();
     rsx! {
@@ -127,7 +139,7 @@ pub fn Notes() -> Element {
                             disabled: loading || !list.truncated, onclick: move |_| offset.set(offset() + 24), ArrowRight { size: 16 } }
                     }
                 }
-                if loading { RequestState {} }
+                if loading && response.is_none() { RequestState {} }
                 else { match response {
                     Some(Ok(list)) => rsx! {
                         if list.sources.is_empty() {

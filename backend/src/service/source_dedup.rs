@@ -29,6 +29,23 @@ pub(super) async fn reject_duplicate(
     text: &str,
     except: Option<&str>,
 ) -> Result<()> {
+    if find_duplicate(service, transaction, space, user, text, except)
+        .await?
+        .is_some()
+    {
+        return Err(MemoryError::Input("内容已存在，无需重复添加".into()));
+    }
+    Ok(())
+}
+
+pub(super) async fn find_duplicate(
+    service: &MemoryService,
+    transaction: &mut Transaction<'_, Postgres>,
+    space: &str,
+    user: &str,
+    text: &str,
+    except: Option<&str>,
+) -> Result<Option<String>> {
     let isolated = super::isolate::isolate(text, &[]);
     let reference =
         regex::Regex::new(r"\[\[secret:[a-f0-9]{32}\]\]").expect("固定秘密引用正则有效");
@@ -57,8 +74,8 @@ pub(super) async fn reject_duplicate(
             .open(&format!("{space}/source/{id}"), &ciphertext)
             .await?;
         if normalize(&String::from_utf8(original).map_err(MemoryError::storage)?) == normalized {
-            return Err(MemoryError::Input("内容已存在，无需重复添加".into()));
+            return Ok(Some(id));
         }
     }
-    Ok(())
+    Ok(None)
 }

@@ -8,3 +8,5 @@ AIO_MEMORY_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1/aio_memory_crud_tes
 ```
 
 覆盖录入、原文读取、修订版本、秘密隔离与 ID 保留、权限拒绝、租约撤销、搜索分页及删除。`ssh_crud` 覆盖设备列表、写入、验证、失败保留、成功删除和非法 alias 拒绝，设备调用经 `/workers` 替身完成。数据库连接信息通过环境变量提供，不提交真实凭据。
+
+`support/source_dedup.rs` 验证人工录入仍拒绝重复，而只读设备的 `deduplicate=true` 导入在两个不同随机请求 ID 并发提交时返回同一来源，归一化换行和首尾空白后只产生一个整理任务。不同密码不能因净化文本相同而合并；身份和空间隔离沿用真实鉴权事务，不增加原文 hash 列。

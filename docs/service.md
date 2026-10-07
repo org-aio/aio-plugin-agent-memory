@@ -6,7 +6,7 @@
 
 | 方法 | 路径 | 契约 |
 |---|---|---|
-| POST | `/capture` | `{requestId,text,spaceId?,origin?,reference?,clarifies?}` 返回 202 `SourceView` |
+| POST | `/capture` | `{requestId,text,spaceId?,origin?,reference?,clarifies?,deduplicate?}` 返回 `SourceView` |
 | GET | `/sources` | `spaceId?,query?,status?,offset?,limit?`，返回 `{sources,total,truncated}`；默认 200 项，limit 为 1..200 |
 | GET | `/sources/{id}` | 净化正文、状态、秘密引用与可操作权限 |
 | PUT | `/sources/{id}` | `{text,version}`，仍有写权限的交互式提交者修订原文，重新隔离、加密并排队整理 |
@@ -25,6 +25,8 @@
 来源列表只搜索净化标题和正文，`query` 最多 256 字符，通配符按字面处理；`offset` 从 0 开始，按内容更新时间和 ID 稳定排序。返回的 `title`、`version`、`origin`、`canEdit`、`canDelete` 用于笔记展示和操作，服务端仍重新鉴权。修改必须带当前版本，冲突返回 409；未变化的秘密字段保留 ID 和独立授权，移除的字段及其授权一并删除。编辑与删除先锁整理任务，再修改来源，旧租约提交不能恢复旧内容。
 
 `origin` 为 chat/note/import。`clarifies` 指向同一原对话、同一提交者的保密暂存资料；仅明确的整段秘密用途说明可以解除暂存，未识别说明不改变原来源。加密原文保留，净化版本和说明来源留痕。
+
+只读设备采集可在无图片、无澄清的 `origin=import` 收件中指定 `deduplicate=true`。同一用户、同一空间的相同原文返回已有来源，不新建整理任务；仍验证写权限并在事务锁内解密比较原文，仅归一化 CRLF 与首尾空白，不持久化原文散列。省略时保留人工录入的重复内容拒绝行为。`requestId` 仍用于响应丢失后的重试，设备应在请求前持久保存随机 ID，不把含秘密的内容 hash 作为服务端索引。
 
 工作调用需要受信服务身份及 `memory:compile` 授权。租约 180 秒，失败最多 5 次并退避，暂停不计失败。未绑定模型不会领取整理任务，仍可收件与检索净化来源。执行和提交均重新检查成员及原提交者写权限。
 

@@ -16,6 +16,8 @@ pub struct CaptureRequest {
     pub clarifies: Option<String>,
     #[serde(default)]
     pub images: Vec<AttachmentDraft>,
+    #[serde(default)]
+    pub deduplicate: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

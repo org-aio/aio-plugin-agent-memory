@@ -143,6 +143,7 @@ async fn run_cases(service: Arc<MemoryService>, _pool: sqlx::PgPool) -> Result<(
                 reference: String::new(),
                 clarifies: None,
                 images: Vec::new(),
+                deduplicate: false,
             }),
         )
         .await

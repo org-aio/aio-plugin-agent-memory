@@ -18,6 +18,7 @@ pub(super) async fn run(
                 reference: String::new(),
                 clarifies: None,
                 images: Vec::new(),
+                deduplicate: false,
             }),
         )
     };
@@ -60,6 +61,7 @@ pub(super) async fn run(
                 reference: String::new(),
                 clarifies: None,
                 images: Vec::new(),
+                deduplicate: false,
             }),
         )
         .await;
@@ -189,6 +191,7 @@ pub(super) async fn run(
                 reference: String::new(),
                 clarifies: None,
                 images: Vec::new(),
+                deduplicate: false,
             }),
         )
         .await
@@ -204,5 +207,51 @@ pub(super) async fn run(
     let _ = capture("删除后可以重新记下", "note")
         .await
         .map_err(service_error)?;
+
+    // 两台设备使用不同随机请求 ID，也只能创建一份来源与整理任务。
+    let synced = |text: &str| {
+        service::intake::capture(
+            State(service.clone()),
+            owner.clone(),
+            Json(CaptureRequest {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                text: text.into(),
+                space_id: Some(space.clone()),
+                origin: "import".into(),
+                reference: "apple-note:test".into(),
+                clarifies: None,
+                images: Vec::new(),
+                deduplicate: true,
+            }),
+        )
+    };
+    let (macbook, macmini) = tokio::join!(
+        synced("设备去重\npassword: sync-alpha-canary"),
+        synced(" \t设备去重\r\npassword: sync-alpha-canary\n"),
+    );
+    let macbook = macbook.map_err(service_error)?.0;
+    let macmini = macmini.map_err(service_error)?.0;
+    assert_eq!(macbook.id, macmini.id);
+    assert!(!macmini.text.contains("sync-alpha-canary"));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM plugin_memory_tasks WHERE id=$1")
+            .bind(&macbook.id)
+            .fetch_one(&pool)
+            .await?,
+        1
+    );
+    let different = synced("设备去重\npassword: sync-beta-canary")
+        .await
+        .map_err(service_error)?
+        .0;
+    assert_ne!(different.id, macbook.id);
+    assert_eq!(
+        synced("设备去重\npassword: sync-alpha-canary")
+            .await
+            .map_err(service_error)?
+            .0
+            .id,
+        macbook.id
+    );
     Ok(())
 }

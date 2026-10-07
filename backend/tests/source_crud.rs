@@ -153,6 +153,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
             reference: String::new(),
             clarifies: None,
             images: Vec::new(),
+            deduplicate: false,
         }),
     )
     .await
@@ -177,6 +178,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
                 content_type: "image/png".into(),
                 data_url: png_url.clone(),
             }],
+            deduplicate: false,
         }),
     )
     .await
@@ -356,6 +358,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
                 reference: String::new(),
                 clarifies: None,
                 images: Vec::new(),
+                deduplicate: false,
             }),
         )
         .await

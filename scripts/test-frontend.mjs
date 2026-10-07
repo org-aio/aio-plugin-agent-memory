@@ -42,6 +42,19 @@ try {
   expect(await frame.evaluate(() => window.__memorySources.length)).toBe(29);
   await geometry();
   await page.screenshot({ path: "test-results/memory-desktop.png" });
+  // 模拟 Mac 采集入库，无需点击或切换页签即可刷新，正在输入的草稿不丢失。
+  const draft = frame.getByRole("textbox", { name: "随心记内容" });
+  await draft.fill("尚未保存的草稿");
+  await frame.evaluate(() => {
+    window.__memorySources.unshift({ ...window.__memorySources[0], id: "apple-live", title: "Mac 新笔记",
+      text: "来自 Mac 的新笔记", updatedAt: Date.now(), origin: "import", status: "pending" });
+  });
+  await expect(frame.locator(".memory-note").filter({ hasText: "来自 Mac 的新笔记" })).toBeVisible({ timeout: 10_000 });
+  await expect(draft).toHaveValue("尚未保存的草稿");
+  await expect(frame.locator(".memory-pagination")).toContainText("29 条记录");
+  await frame.evaluate(() => { window.__memorySources = window.__memorySources.filter(item => item.id !== "apple-live"); });
+  await expect(frame.locator(".memory-pagination")).toContainText("28 条记录", { timeout: 10_000 });
+  await draft.fill("");
   // 用真实滚轮验证可达性，避免 locator.click 的自动滚动掩盖 overflow:hidden。
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
@@ -183,6 +196,9 @@ try {
   await frame.getByRole("tab", { name: "SSH", exact: true }).click();
   await expect(frame.getByRole("heading", { name: "SSH 连接", exact: true })).toBeVisible();
   await expect(frame.getByText("暂无 SSH 主机", { exact: true })).toBeVisible();
+  const sourceReads = await frame.evaluate(() => window.__memoryCalls.filter(call => call.path.startsWith("/sources?")).length);
+  await page.waitForTimeout(3500);
+  expect(await frame.evaluate(() => window.__memoryCalls.filter(call => call.path.startsWith("/sources?")).length)).toBe(sourceReads);
   await frame.getByRole("button", { name: "添加主机", exact: true }).click();
   const sshDialog = frame.getByRole("dialog");
   await expect(sshDialog.getByRole("heading", { name: "添加 SSH 主机", exact: true })).toBeVisible();

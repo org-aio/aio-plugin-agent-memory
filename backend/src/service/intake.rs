@@ -29,6 +29,11 @@ pub async fn capture(
     Json(request): Json<CaptureRequest>,
 ) -> Result<Json<SourceView>> {
     validate_capture(&request)?;
+    if request.deduplicate
+        && (request.origin != "import" || !request.images.is_empty() || request.clarifies.is_some())
+    {
+        return Err(MemoryError::Input("去重收件仅支持无图片的文本导入".into()));
+    }
     let images = attachment_bytes(&request.images)?;
     let mut transaction = service.pool.begin().await?;
     let space = require_space(
@@ -83,7 +88,7 @@ pub async fn capture(
         && request.clarifies.is_none()
         && !(request.text.trim().is_empty() && !request.images.is_empty())
     {
-        super::source_dedup::reject_duplicate(
+        let duplicate = super::source_dedup::find_duplicate(
             &service,
             &mut transaction,
             &space.id,
@@ -92,6 +97,14 @@ pub async fn capture(
             None,
         )
         .await?;
+        if let Some(id) = duplicate {
+            if !request.deduplicate {
+                return Err(MemoryError::Input("内容已存在，无需重复添加".into()));
+            }
+            let source = source_view(&mut transaction, &context, &id).await?;
+            transaction.commit().await?;
+            return Ok(Json(source));
+        }
     }
     let isolated = isolate(&request.text, &[]);
     let title = if isolated.quarantined {
@@ -457,6 +470,7 @@ pub async fn import(
         reference: String::new(),
         clarifies: None,
         images: Vec::new(),
+        deduplicate: false,
     };
     let Json(source) = capture(State(service.clone()), context.clone(), Json(request)).await?;
     let mut transaction = service.pool.begin().await?;
