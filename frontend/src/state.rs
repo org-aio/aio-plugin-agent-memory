@@ -35,7 +35,10 @@ impl View {
 pub struct MemoryState {
     pub spaces: Vec<MemorySpace>,
     pub space_id: Option<String>,
+    /// Wiki 列表与搜索使用的节点集合。
     pub graph: MemoryGraph,
+    /// 关系图专用的知识节点概览，不受 Wiki 搜索影响。
+    pub overview: MemoryGraph,
     pub sources: Vec<SourceView>,
     pub secrets: Vec<SecretSummary>,
     pub ssh_hosts: Vec<SshHost>,
@@ -56,6 +59,12 @@ impl Default for MemoryState {
             spaces: Vec::new(),
             space_id: None,
             graph: MemoryGraph {
+                nodes: Vec::new(),
+                edges: Vec::new(),
+                total: 0,
+                truncated: false,
+            },
+            overview: MemoryGraph {
                 nodes: Vec::new(),
                 edges: Vec::new(),
                 total: 0,
@@ -124,11 +133,30 @@ pub async fn load(mut state: Signal<MemoryState>) {
             let mut value = state.write();
             value.spaces = spaces;
             value.space_id = space_id;
+            value.overview = graph.clone();
             value.graph = graph;
             value.sources = sources;
             value.secrets = secrets;
             value.ssh_hosts = ssh_hosts;
             value.ssh_devices = ssh_devices;
+            value.error = None;
+        }
+        Err(error) => state.write().error = Some(error),
+    }
+    state.write().busy = false;
+}
+
+/// 只刷新关系图概览，不触碰 Wiki 列表和搜索结果。
+pub async fn refresh_overview(mut state: Signal<MemoryState>) {
+    let space_id = state.peek().space_id.clone();
+    state.write().busy = true;
+    let result =
+        transport::space_request::<MemoryGraph>("GET", "/graph", space_id.as_deref(), json!(null))
+            .await;
+    match result {
+        Ok(overview) => {
+            let mut value = state.write();
+            value.overview = overview;
             value.error = None;
         }
         Err(error) => state.write().error = Some(error),
@@ -161,6 +189,7 @@ pub async fn refresh(mut state: Signal<MemoryState>) {
     match result {
         Ok((graph, sources, secrets, ssh_hosts, ssh_devices)) => {
             let mut value = state.write();
+            value.overview = graph.clone();
             value.graph = graph;
             value.sources = sources;
             value.secrets = secrets;

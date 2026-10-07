@@ -266,6 +266,52 @@ pub(crate) async fn graph(
     })
 }
 
+/// 图谱概览只返回知识节点及其相互关系。
+///
+/// 收件来源（SOURCE）数量远多于知识条目，按更新时间截断会把图谱淹没成只有来源、
+/// 没有关系的标签云。这里固定按知识节点取样，来源和“来源”归属边保留在来源列表与
+/// 节点详情中；关键词检索与召回仍使用 `graph`。
+pub(crate) async fn overview(
+    transaction: &mut Transaction<'_, Postgres>,
+    space_id: &str,
+    limit: usize,
+) -> Result<MemoryGraph> {
+    if !(1..=200).contains(&limit) {
+        return Err(MemoryError::Input("图谱节点上限超出范围".into()));
+    }
+    let where_sql = format!("{VISIBLE} AND n.kind <> 'SOURCE'");
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM plugin_memory_nodes n WHERE {where_sql}"
+    ))
+    .bind(space_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    let rows = sqlx::query(&format!(
+        "SELECT n.id,n.title,n.kind,substring(n.content,1,180),n.url,n.tags,n.version,n.updated_at FROM plugin_memory_nodes n WHERE {where_sql} ORDER BY n.updated_at DESC,n.id LIMIT $2"
+    ))
+    .bind(space_id)
+    .bind(limit as i64)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let mut nodes = Vec::new();
+    for row in rows {
+        nodes.push(node(transaction, row).await?);
+    }
+    let node_ids: Vec<String> = nodes.iter().map(|node| node.id.clone()).collect();
+    // 两端都在取样集合内，因此“来源”归属边不会被带入关系图。
+    let edges = links(transaction, space_id, &node_ids, true)
+        .await?
+        .into_iter()
+        .take(800)
+        .collect::<Vec<_>>();
+    Ok(MemoryGraph {
+        truncated: total > nodes.len() as i64 || edges.len() >= 800,
+        total,
+        nodes,
+        edges,
+    })
+}
+
 pub(crate) async fn revisions(
     transaction: &mut Transaction<'_, Postgres>,
     space_id: &str,

@@ -31,6 +31,14 @@ function installFixture() {
   };
   let serial = 100;
   const requests = new Map();
+  // 关系图夹具：两个知识节点由一条关系连接，来源节点不应出现在概览里。
+  window.__memoryGraphNodes = [
+    { id: "node-project", title: "星桥项目", kind: "PROJECT", content: "项目正文", url: "", tags: ["项目"], version: 2, updatedAt: Date.now(), aliases: [] },
+    { id: "node-person", title: "林工", kind: "PERSON", content: "负责对接", url: "", tags: [], version: 1, updatedAt: Date.now() - 1000, aliases: [] },
+  ];
+  window.__memoryGraphEdges = [
+    { id: "edge-1", source: "node-project", target: "node-person", relation: "负责", evidence: "验收依据" },
+  ];
   window.__memorySshHosts = [];
   window.__memorySshDevices = [
     { id: "11111111-1111-4111-8111-111111111111", label: "本机 Worker", platform: "macOS", status: "active", lastSeen: Date.now() },
@@ -49,8 +57,15 @@ function installFixture() {
         { id: "space-1", title: "个人记忆", personal: true, role: readonly ? "READER" : "OWNER", modelBinding: null },
         { id: "space-2", title: "项目笔记", personal: false, role: "OWNER", modelBinding: null },
       ];
-      if (route === "/graph") return { nodes: [], edges: [], total: 0, truncated: false };
+      if (route === "/graph") return { nodes: window.__memoryGraphNodes, edges: window.__memoryGraphEdges, total: window.__memoryGraphNodes.length, truncated: false };
       if (route === "/secrets") return [];
+      if (route === "/nodes" && method === "POST") return window.__memoryGraphNodes[0];
+      const graphNode = route.match(/^\/nodes\/([^/]+)(\/revisions)?$/);
+      if (graphNode) {
+        const node = window.__memoryGraphNodes.find((item) => item.id === graphNode[1]);
+        if (!node) throw new Error("记录不存在");
+        return graphNode[2] ? [] : node;
+      }
       const sshAlias = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
       if (route === "/ssh/devices") return window.__memorySshDevices;
       if (route === "/ssh/hosts" && method === "GET") return window.__memorySshHosts;

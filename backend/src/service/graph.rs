@@ -12,6 +12,10 @@ use std::sync::Arc;
 
 use super::nodes::SpaceQuery;
 
+/// 图谱概览：返回知识节点及它们之间的关系，供界面绘制关系图。
+///
+/// 这里固定使用知识节点概览而非按更新时间取样，避免大量收件来源把关系挤出结果。
+/// 需要按关键词搜索节点时使用 `search`。
 pub async fn graph(
     State(service): State<Arc<MemoryService>>,
     Query(query): Query<SpaceQuery>,
@@ -26,17 +30,7 @@ pub async fn graph(
         false,
     )
     .await?;
-    let graph = store::graph(
-        &mut transaction,
-        &space.id,
-        SearchRequest {
-            query: String::new(),
-            kind: None,
-            limit: 200,
-        },
-        true,
-    )
-    .await?;
+    let graph = store::overview(&mut transaction, &space.id, 200).await?;
     transaction.commit().await?;
     Ok(Json(graph))
 }

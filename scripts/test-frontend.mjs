@@ -85,6 +85,41 @@ try {
   await expect(frame.locator(".memory-composer__preview pre")).toContainText("let done = true;");
   await frame.getByRole("button", { name: "编辑", exact: true }).click();
   await frame.getByRole("tab", { name: "图谱", exact: true }).click();
+  // 关系图必须画出知识节点、关系和方向，而不是把来源堆成标签云。
+  await expect(frame.getByRole("img", { name: "记忆关系图", exact: true })).toBeVisible();
+  await expect(frame.locator(".memory-graph__node")).toHaveCount(2);
+  await expect(frame.locator(".memory-graph__edge")).toHaveCount(1);
+  await expect(frame.locator(".memory-graph__edge-label")).toHaveText("负责");
+  await expect(frame.getByText("2 个知识节点", { exact: true })).toBeVisible();
+  await expect(frame.getByText("1 条关系", { exact: true })).toBeVisible();
+  await geometry();
+  await page.screenshot({ path: "test-results/memory-graph-desktop.png" });
+  // 选中节点后列出它的关系，并可跳转到 Wiki 查看。
+  await frame.locator(".memory-graph__node").filter({ hasText: "星桥项目" }).click();
+  await expect(frame.getByRole("heading", { name: "星桥项目", exact: true })).toBeVisible();
+  await expect(frame.locator(".memory-graph__relations li")).toContainText("负责");
+  await expect(frame.locator(".memory-graph__relations li")).toContainText("林工");
+  // 拖动节点后位置真的改变，且刷新前不会被渲染重置。
+  const dragged = frame.locator(".memory-graph__node").filter({ hasText: "星桥项目" });
+  const before = await dragged.locator("circle").getAttribute("cx");
+  const box = await dragged.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2 - 90, { steps: 8 });
+  await page.mouse.up();
+  const after = await dragged.locator("circle").getAttribute("cx");
+  expect(Number(after)).not.toBe(Number(before));
+  // 缩放与重置保持可用且不破坏布局。
+  await frame.getByRole("button", { name: "放大图谱", exact: true }).click();
+  await frame.getByRole("button", { name: "重置图谱视图", exact: true }).click();
+  await expect(dragged.locator("circle")).toHaveAttribute("cx", before);
+  await geometry();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await geometry();
+    await page.screenshot({ path: `test-results/memory-graph-mobile-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await frame.getByRole("tab", { name: "随心记", exact: true }).click();
   await expect(input).toHaveValue(note);
   await frame.getByRole("button", { name: "知识空间", exact: true }).click();

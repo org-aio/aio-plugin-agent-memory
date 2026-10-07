@@ -58,7 +58,7 @@
 
 | 方法 | 路径 | 契约 |
 |---|---|---|
-| GET | `/graph` | 最近 200 个节点摘要和至多 800 条关系 |
+| GET | `/graph` | 关系图概览：至多 200 个知识节点（不含收件来源）和它们之间至多 800 条关系，按更新时间倒序 |
 | POST | `/search` | `{query,kind?,limit?}`，标题、正文、标签、别名搜索 |
 | POST | `/recall` | `{query,limit?,excludeIds?}`，关键词与图谱检索候选，至多 24 项 |
 | POST | `/route` | `{sourceId}`，仅从当前空间已净化来源分类，返回 route、reply、context、citations、matchedNodeIds、activatedNodeIds |
