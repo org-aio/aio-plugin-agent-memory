@@ -17,6 +17,8 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio::sync::Mutex;
 
+#[path = "support/chat_routing.rs"]
+mod chat_routing;
 #[path = "support/source_dedup.rs"]
 mod source_dedup;
 
@@ -444,6 +446,7 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
         .total,
         0
     );
-    source_dedup::run(service, pool, owner, space.clone()).await?;
+    source_dedup::run(service.clone(), pool.clone(), owner.clone(), space.clone()).await?;
+    chat_routing::run(service, pool, owner, space).await?;
     Ok(())
 }

@@ -20,7 +20,7 @@
 | POST | `/sources/{id}/resolve` | `{accept,versions?}`，接受修订必须携带查看过的条目版本 |
 | POST | `/import` | `{requestId,title,text,url?}`，文件/文本采用同一隔离管线，重试不重复创建来源 |
 
-`SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict、failed 或 recorded。recorded 表示明确查找的对话来源，保留收件但不生成 wiki 任务，也不参与普通检索与图谱。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
+`SourceView` 只含净化内容，状态为 pending、processing、complete、quarantined、conflict、failed 或 recorded。recorded 表示明确问候或查找的纯文本对话来源；收件事务直接保留该状态，不生成 wiki 任务或提及关系，也不参与普通检索与图谱。随心记、导入、带图片或澄清的来源继续按资料处理；保密暂存优先。秘密字段用 `[[secret:字段ID]]` 替代；字段 ID 的归属由服务端校验。原文以宿主版本化密钥加密，不进入检索、图谱或模型任务。
 
 来源列表只搜索净化标题和正文，`query` 最多 256 字符，通配符按字面处理；`offset` 从 0 开始，按内容更新时间和 ID 稳定排序。返回的 `title`、`version`、`origin`、`canEdit`、`canDelete` 用于笔记展示和操作，服务端仍重新鉴权。修改必须带当前版本，冲突返回 409；未变化的秘密字段保留 ID 和独立授权，移除的字段及其授权一并删除。编辑与删除先锁整理任务，再修改来源，旧租约提交不能恢复旧内容。
 

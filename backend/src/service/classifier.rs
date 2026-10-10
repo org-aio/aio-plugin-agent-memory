@@ -55,13 +55,12 @@ pub fn classify(sanitized: &str) -> Decision {
         && !question.contains(';')
         && !question.contains('；')
         && question.chars().count() <= 180
+        && let Some(subject) = lookup_subject(&question)
     {
-        if let Some(subject) = lookup_subject(&question) {
-            return Decision {
-                intent: ChatIntent::Recall,
-                query: subject,
-            };
-        }
+        return Decision {
+            intent: ChatIntent::Recall,
+            query: subject,
+        };
     }
     let structured =
         question.trim_start().starts_with('{') || question.trim_start().starts_with('[');
