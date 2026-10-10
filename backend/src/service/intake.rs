@@ -1,5 +1,6 @@
 use super::{
     MemoryError, Result, access,
+    classifier::{self, ChatIntent},
     context::MemoryContext,
     isolate::isolate,
     secrets,
@@ -136,8 +137,18 @@ pub async fn capture(
         None,
     )
     .await?;
+    // 收件事务内决定是否仅记录，避免后台抢先领取问候或查找的整理任务。
+    let record_only = request.origin == "chat"
+        && images.is_empty()
+        && request.clarifies.is_none()
+        && matches!(
+            classifier::classify(&isolated.text).intent,
+            ChatIntent::Greeting | ChatIntent::Recall
+        );
     let status = if isolated.quarantined {
         "quarantined"
+    } else if record_only {
+        "recorded"
     } else {
         "pending"
     };
@@ -204,7 +215,7 @@ pub async fn capture(
             .execute(&mut *transaction)
             .await?;
     }
-    if !isolated.quarantined {
+    if status == "pending" {
         sqlx::query("INSERT INTO plugin_memory_tasks(id,space_id,actor_id,state,available_at) VALUES($1,$2,$3,'pending',$4)")
             .bind(&node.id)
             .bind(&space.id)
@@ -261,6 +272,15 @@ pub async fn capture(
                 .await?;
         }
     }
+    super::clarification::apply(
+        &service,
+        &mut transaction,
+        &context,
+        &space.id,
+        &node.id,
+        &request,
+    )
+    .await?;
     let source = source_view(&mut transaction, &context, &node.id).await?;
     transaction.commit().await?;
     Ok(Json(source))
@@ -478,7 +498,7 @@ pub async fn import(
     let edges = store::links(
         &mut transaction,
         &source.space_id,
-        &[source.id.clone()],
+        std::slice::from_ref(&source.id),
         false,
     )
     .await?;
@@ -625,10 +645,11 @@ pub(crate) fn source_title(text: &str) -> String {
         for key in [
             "title", "project", "website", "name", "项目", "标题", "网站",
         ] {
-            if let Some(value) = object.get(key).and_then(serde_json::Value::as_str) {
-                if !value.is_empty() && !value.contains("[[secret:") {
-                    return value.chars().take(100).collect();
-                }
+            if let Some(value) = object.get(key).and_then(serde_json::Value::as_str)
+                && !value.is_empty()
+                && !value.contains("[[secret:")
+            {
+                return value.chars().take(100).collect();
             }
         }
         return "账号与资料".into();
@@ -669,7 +690,7 @@ fn wiki_links(text: &str) -> Vec<String> {
 
 fn validate_capture(request: &CaptureRequest) -> Result<()> {
     if (request.text.trim().is_empty() && request.images.is_empty())
-        || request.text.as_bytes().len() > 100_000
+        || request.text.len() > 100_000
         || request.request_id.is_empty()
         || request.request_id.len() > 160
         || !matches!(request.origin.as_str(), "chat" | "note" | "import")

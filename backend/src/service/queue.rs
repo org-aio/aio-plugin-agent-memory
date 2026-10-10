@@ -382,7 +382,13 @@ async fn apply_result(
         .iter()
         .map(|secret| secret.id.clone())
         .collect();
-    let entry_json = serde_json::to_string(&result.entries)?;
+    // 元数据 ID 单独验证归属；秘密扫描覆盖模型可写的正文、标题、标签和关系。
+    let drafts = result
+        .entries
+        .iter()
+        .map(|entry| &entry.draft)
+        .collect::<Vec<_>>();
+    let entry_json = serde_json::to_string(&drafts)?;
     let relation_json = serde_json::to_string(&result.relations)?;
     for field in [entry_json, relation_json] {
         let checked = isolate(&field, &allowed);
