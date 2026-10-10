@@ -27,6 +27,10 @@ pub fn isolate(input: &str, allowed: &[String]) -> Isolation {
             uncertain.set(true);
             return "[protected]".to_owned();
         }
+        // 已授权引用由原生调用方确认；不能再次作为明文秘密抽取。
+        if allowed.iter().any(|id| value == format!("[[secret:{id}]]")) {
+            return value.to_owned();
+        }
         if let Some(existing) = secrets
             .iter()
             .find(|secret: &&IsolatedSecret| secret.value == value)
@@ -41,14 +45,11 @@ pub fn isolate(input: &str, allowed: &[String]) -> Isolation {
         });
         format!("[[secret:{id}]]")
     };
-    let mut text = protect_private_keys(&checked, &mut protect);
-    text = protect_assignments(&text, &mut protect, &uncertain);
-    text = protect_bearer(&text, &mut protect);
-    text = protect_known_tokens(&text, &mut protect);
-    let structured = serde_json::from_str::<Value>(checked.trim())
-        .ok()
-        .map(|value| visit(value, &mut protect));
-    let initial = structured.as_ref().map(Value::to_string).unwrap_or(text);
+    // JSON 先解码再逐字段净化，普通字符串只扫描已知秘密格式。
+    let initial = match serde_json::from_str::<Value>(input.trim()) {
+        Ok(value) => visit(value, &mut protect, &uncertain).to_string(),
+        Err(_) => protect_text(input, &mut protect, &uncertain),
+    };
     if serde_json::from_str::<Value>(checked.trim()).is_err()
         && (checked.trim_start().starts_with('{') || checked.trim_start().starts_with('['))
         && assignment().is_match(&checked.to_ascii_lowercase())
@@ -57,7 +58,7 @@ pub fn isolate(input: &str, allowed: &[String]) -> Isolation {
     }
     let mut safe = initial;
     let mut ordered = secrets.clone();
-    ordered.sort_by(|left, right| right.value.len().cmp(&left.value.len()));
+    ordered.sort_by_key(|secret| std::cmp::Reverse(secret.value.len()));
     for secret in &ordered {
         safe =
             replace_outside_references(&safe, &secret.value, &format!("[[secret:{}]]", secret.id));
@@ -73,7 +74,11 @@ pub fn isolate(input: &str, allowed: &[String]) -> Isolation {
     }
 }
 
-fn visit(mut value: Value, protect: &mut impl FnMut(&str, &str) -> String) -> Value {
+fn visit(
+    mut value: Value,
+    protect: &mut impl FnMut(&str, &str) -> String,
+    uncertain: &std::cell::Cell<bool>,
+) -> Value {
     match &mut value {
         Value::Object(object) => {
             let entries = std::mem::take(object);
@@ -82,7 +87,7 @@ fn visit(mut value: Value, protect: &mut impl FnMut(&str, &str) -> String) -> Va
                 let protected = if sensitive(&key) {
                     Value::String(protect(&key, &scalar(&value)))
                 } else {
-                    visit(value, protect)
+                    visit(value, protect, uncertain)
                 };
                 next.insert(key, protected);
             }
@@ -90,13 +95,46 @@ fn visit(mut value: Value, protect: &mut impl FnMut(&str, &str) -> String) -> Va
         }
         Value::Array(values) => {
             for value in values {
-                *value = visit(value.take(), protect);
+                *value = visit(value.take(), protect, uncertain);
             }
             value
         }
-        Value::String(value) => Value::String(protect("secret", value.as_str())),
+        Value::String(value) => Value::String(protect_text(value, protect, uncertain)),
         _ => value,
     }
+}
+
+fn protect_text(
+    text: &str,
+    protect: &mut impl FnMut(&str, &str) -> String,
+    uncertain: &std::cell::Cell<bool>,
+) -> String {
+    // 引用内部的 secret: 不是密码赋值；未知引用已在入口被隔离。
+    let references = Regex::new(r"\[\[secret:[a-f0-9]{32}\]\]").expect("固定引用正则有效");
+    let mut result = String::new();
+    let mut position = 0;
+    for reference in references.find_iter(text) {
+        result.push_str(&protect_plain_text(
+            &text[position..reference.start()],
+            protect,
+            uncertain,
+        ));
+        result.push_str(reference.as_str());
+        position = reference.end();
+    }
+    result.push_str(&protect_plain_text(&text[position..], protect, uncertain));
+    result
+}
+
+fn protect_plain_text(
+    text: &str,
+    protect: &mut impl FnMut(&str, &str) -> String,
+    uncertain: &std::cell::Cell<bool>,
+) -> String {
+    let text = protect_private_keys(text, protect);
+    let text = protect_assignments(&text, protect, uncertain);
+    let text = protect_bearer(&text, protect);
+    protect_known_tokens(&text, protect)
 }
 
 fn scalar(value: &Value) -> String {
@@ -214,5 +252,52 @@ mod tests {
     fn quarantines_unknown_secret_references() {
         let result = isolate("[[secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]]", &[]);
         assert!(result.quarantined);
+    }
+    #[test]
+    fn json_preserves_ordinary_fields_and_replaces_duplicate_secrets() {
+        let result = isolate(
+            r#"{"username":"alice","password":"canary","note":"again canary","nested":[{"title":"project","body":"hello"}]}"#,
+            &[],
+        );
+        assert!(!result.quarantined);
+        assert_eq!(result.secrets.len(), 1);
+        assert_eq!(result.secrets[0].value, "canary");
+        let safe: Value = serde_json::from_str(&result.text).unwrap();
+        assert_eq!(safe["username"], "alice");
+        assert_eq!(safe["nested"][0]["body"], "hello");
+        assert!(!result.text.contains("canary"));
+    }
+
+    #[test]
+    fn nested_strings_scan_secrets_without_hiding_ordinary_text() {
+        let result = isolate(
+            r#"{"notes":["hello","password: hidden","Bearer bearer-value"],"escaped":"api_key: \"another-value\""}"#,
+            &[],
+        );
+        assert!(!result.quarantined);
+        assert_eq!(result.secrets.len(), 3);
+        assert!(result.text.contains("hello"));
+        assert!(!result.text.contains("hidden"));
+        assert!(!result.text.contains("bearer-value"));
+        assert!(!result.text.contains("another-value"));
+    }
+
+    #[test]
+    fn compilation_can_keep_authorized_references_without_creating_secrets() {
+        let id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned();
+        let reference = format!("[[secret:{id}]]");
+        let value = serde_json::json!([{"draft":{"title":"account","content":format!("password: {reference}")},"secretIds":[id]}]);
+        let result = isolate(&value.to_string(), &[id]);
+        assert!(!result.quarantined);
+        assert!(result.secrets.is_empty());
+        assert!(result.text.contains(&reference));
+        let nested = serde_json::json!({"draft":{"content":serde_json::json!({"password":reference,"note":"alice"}).to_string()}});
+        let result = isolate(
+            &nested.to_string(),
+            &["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()],
+        );
+        assert!(!result.quarantined);
+        assert!(result.secrets.is_empty());
+        assert!(result.text.contains(&reference));
     }
 }
