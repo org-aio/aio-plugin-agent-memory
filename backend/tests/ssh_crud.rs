@@ -110,6 +110,7 @@ async fn ssh_hosts_apply_verify_and_remove_through_paired_device() -> Result<()>
         Cryptography::new(Some(socket.clone()), Some("test-only".into())),
         Some(socket.clone()),
         Some("test-only".into()),
+        "/api/runtime/components/public/test/tenant".into(),
     )?);
 
     let outcome = tokio::spawn(run_cases(service, host.clone())).await;

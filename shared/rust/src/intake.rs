@@ -94,6 +94,22 @@ pub struct SourceUpdate {
     pub version: i64,
 }
 
+/// 分享链接只返回站内绝对路径；调用方使用当前站点 origin 拼接完整外链。
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareLink {
+    pub path: String,
+    pub expires_at: i64,
+}
+
+/// 省略有效期时使用一天；服务端会限制可选择的最小和最大范围。
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareRequest {
+    #[serde(default)]
+    pub expires_in_seconds: Option<i64>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceQuery {

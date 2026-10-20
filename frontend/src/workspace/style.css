@@ -183,3 +183,10 @@
   .memory-dialog.dx-dialog { padding: 16px; max-width: calc(100% - 20px); max-height: calc(100dvh - 20px); }
   .memory-dialog__footer { flex-wrap: wrap; }
 }
+.memory-share__note { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
+.memory-share__current { display: grid; gap: 6px; }
+.memory-share__current label, .memory-share__days label { font-size: 12px; font-weight: 600; color: var(--secondary-foreground); }
+.memory-share__link { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--input); border-radius: 6px; background: var(--muted); color: var(--foreground); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.memory-share__expiry { margin: 0; color: var(--muted-foreground); font-size: 12px; }
+.memory-share__days { display: flex; align-items: center; gap: 10px; }
+.memory-share__days-input { width: 88px; padding: 7px 9px; border: 1px solid var(--input); border-radius: 6px; background: var(--background); color: var(--foreground); }

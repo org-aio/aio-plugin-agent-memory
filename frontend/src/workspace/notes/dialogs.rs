@@ -3,7 +3,7 @@ use crate::{
     state::{self, MemoryState},
     transport,
 };
-use az_memory_model::{RevealedSecret, SourceView};
+use az_memory_model::{RevealedSecret, ShareLink, SourceView};
 use az_ui_components::{
     admin::{RequestState, StatusMessage},
     button::{Button, ButtonSize, ButtonVariant},
@@ -12,7 +12,7 @@ use az_ui_components::{
     textarea::Textarea,
 };
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{Pencil, Trash2, X};
+use dioxus_icons::lucide::{Copy, Pencil, Share2, Trash2, X};
 use serde_json::{Value, json};
 
 #[component]
@@ -20,6 +20,7 @@ pub(super) fn NoteDetail(
     id: String,
     on_close: EventHandler<()>,
     on_edit: EventHandler<SourceView>,
+    on_share: EventHandler<SourceView>,
 ) -> Element {
     let mut result = use_resource(move || {
         let id = id.clone();
@@ -42,6 +43,7 @@ pub(super) fn NoteDetail(
                     }
                     footer { class: "memory-dialog__footer",
                         time { "{time_label(source.updated_at)}" }
+                        if source.can_delete { Button { variant: ButtonVariant::Outline, onclick: { let source = source.clone(); move |_| on_share.call(source.clone()) }, Share2 { size: 16 } "分享外链" } }
                         if source.can_edit { Button { onclick: move |_| on_edit.call(source.clone()), Pencil { size: 16 } "编辑记录" } }
                     }
                 },
@@ -127,6 +129,119 @@ pub(super) fn NoteEditor(source: SourceView, on_close: EventHandler<()>) -> Elem
             }
         }
     }
+}
+
+/// 外链只读取净化后的正文和图片；令牌和有效期都由服务端保存。
+#[component]
+pub(super) fn ShareDialog(source: SourceView, on_close: EventHandler<()>) -> Element {
+    let load_id = source.id.clone();
+    let revoke_id = source.id.clone();
+    let create_id = source.id.clone();
+    let mut link = use_signal(|| None::<ShareLink>);
+    let mut loading = use_signal(|| true);
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(|| None::<String>);
+    let mut copied = use_signal(|| false);
+    let mut days = use_signal(|| "1".to_owned());
+    use_future(move || {
+        let id = load_id.clone();
+        async move {
+            match transport::request::<Option<ShareLink>>(
+                "GET",
+                &format!("/sources/{id}/share"),
+                Value::Null,
+            )
+            .await
+            {
+                Ok(value) => {
+                    // 已有链接按剩余有效期预填，重新生成时不必重新换算天数。
+                    if let Some(current) = &value {
+                        let remaining = (current.expires_at - now_millis()).max(1);
+                        days.set((remaining / 86_400_000).clamp(1, 365).to_string());
+                    }
+                    link.set(value);
+                }
+                Err(message) => error.set(Some(message)),
+            }
+            loading.set(false);
+        }
+    });
+    let current = link.read().clone();
+    let url = current.as_ref().map(|value| absolute_url(&value.path));
+    rsx! {
+        Dialog { class: "memory-dialog memory-share", open: true, on_open_change: move |open: bool| if !open && !busy() { on_close.call(()); },
+            header { class: "memory-dialog__heading", DialogTitle { "分享这条笔记" }
+                Button { size: ButtonSize::IconSm, variant: ButtonVariant::Ghost, title: "关闭", aria_label: "关闭分享", disabled: busy(), onclick: move |_| on_close.call(()), X { size: 18 } }
+            }
+            DialogDescription { "生成无需登录即可阅读的外链；默认有效期 1 天，可设置 1 到 365 天。" }
+            p { class: "memory-share__note", "外链只包含净化后的正文和图片，不包含原文中的保密字段。" }
+            if loading() { RequestState {} }
+            if let Some(message) = error() { StatusMessage { message, error: true } }
+            if !loading() {
+                if let Some(current) = current.clone() {
+                    div { class: "memory-share__current",
+                        label { "当前链接" }
+                        input { class: "memory-share__link", r#type: "text", readonly: true, value: url.clone().unwrap_or_default(), aria_label: "分享链接" }
+                        p { class: "memory-share__expiry", "有效期至 {time_label(current.expires_at)}" }
+                    }
+                }
+                div { class: "memory-share__days",
+                    label { r#for: "memory-share-days", "有效期（天）" }
+                    input { id: "memory-share-days", class: "memory-share__days-input", r#type: "number", min: "1", max: "365", value: "{days()}",
+                        disabled: busy(), oninput: move |event: FormEvent| days.set(event.value()) }
+                }
+            }
+            footer { class: "memory-dialog__footer",
+                if let Some(current) = current.clone() {
+                    Button { variant: ButtonVariant::Ghost, disabled: busy(), onclick: move |_| {
+                        let value = absolute_url(&current.path);
+                        spawn(async move {
+                            match transport::copy(value).await {
+                                Ok(()) => copied.set(true),
+                                Err(message) => error.set(Some(message)),
+                            }
+                        });
+                    }, Copy { size: 16 } if copied() { "已复制" } else { "复制链接" } }
+                    Button { variant: ButtonVariant::Destructive, disabled: busy(), onclick: move |_| {
+                        if busy() { return; }
+                        busy.set(true); error.set(None); copied.set(false); let id = revoke_id.clone();
+                        spawn(async move {
+                            match transport::request::<Value>("DELETE", &format!("/sources/{id}/share"), Value::Null).await {
+                                Ok(_) => { link.set(None); busy.set(false); }
+                                Err(message) => { error.set(Some(message)); busy.set(false); }
+                            }
+                        });
+                    }, "停止分享" }
+                }
+                Button { variant: ButtonVariant::Outline, disabled: busy(), onclick: move |_| on_close.call(()), "关闭" }
+                Button { disabled: busy() || loading(), onclick: move |_| {
+                    if busy() || loading() { return; }
+                    let value = days().trim().parse::<i64>().ok();
+                    if !matches!(value, Some(1..=365)) { error.set(Some("有效期请输入 1 到 365 天".into())); return; }
+                    busy.set(true); error.set(None); copied.set(false);
+                    let id = create_id.clone();
+                    let expires = value.unwrap_or(1) * 86_400;
+                    spawn(async move {
+                        match transport::request::<ShareLink>("POST", &format!("/sources/{id}/share"), json!({"expiresInSeconds": expires})).await {
+                            Ok(value) => { link.set(Some(value)); busy.set(false); }
+                            Err(message) => { error.set(Some(message)); busy.set(false); }
+                        }
+                    });
+                }, if current.is_some() { "重新生成" } else { "生成链接" } }
+            }
+        }
+    }
+}
+
+fn now_millis() -> i64 {
+    js_sys::Date::now() as i64
+}
+
+fn absolute_url(path: &str) -> String {
+    let origin = web_sys::window()
+        .and_then(|window| window.location().origin().ok())
+        .unwrap_or_default();
+    format!("{origin}{path}")
 }
 
 #[component]

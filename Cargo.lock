@@ -197,6 +197,7 @@ dependencies = [
  "az-memory-model",
  "az-plugin-contract",
  "base64",
+ "pulldown-cmark",
  "regex",
  "reqwest",
  "serde",
@@ -212,8 +213,9 @@ dependencies = [
 [[package]]
 name = "az-plugin-contract"
 version = "2026.5.10"
-source = "git+https://github.com/zjarlin/aio-platform.git?rev=cc8ac37a112e3ed354550b1ec23deb9e0a905fc1#cc8ac37a112e3ed354550b1ec23deb9e0a905fc1"
+source = "git+https://github.com/zjarlin/aio-platform.git?rev=24e7766332e3d5f3f70ca8b235aa1f63aca982c7#24e7766332e3d5f3f70ca8b235aa1f63aca982c7"
 dependencies = [
+ "anyhow",
  "serde",
  "serde_json",
  "url",

@@ -9,6 +9,7 @@ pub mod nodes;
 pub mod queue;
 pub mod routing;
 pub mod secrets;
+pub mod share;
 mod source_dedup;
 pub mod source_edit;
 pub mod spaces;
@@ -24,6 +25,9 @@ pub use intake::{
 pub use nodes::{create_edge, delete, delete_edge, edges, get, revisions, rollback, sources};
 pub use queue::{claim, fail, proposal, resolve, source_proposal, submit};
 pub use secrets::{grant, list as secrets_list, reveal};
+pub use share::{
+    create as share_create, get as share_get, page as share_page, revoke as share_revoke,
+};
 pub use spaces::{add_member, list, members, remove_member};
 pub use ssh::{
     apply as ssh_apply, create as ssh_create, delete as ssh_delete, devices as ssh_devices,
@@ -43,6 +47,7 @@ pub struct MemoryService {
     pub(crate) crypto: Cryptography,
     pub(crate) broker_token: Option<String>,
     pub(crate) broker: Client,
+    pub(crate) public_base: String,
 }
 
 impl MemoryService {
@@ -51,6 +56,7 @@ impl MemoryService {
         crypto: Cryptography,
         broker_socket: Option<PathBuf>,
         broker_token: Option<String>,
+        public_base: String,
     ) -> AnyResult<Self> {
         let mut builder = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -64,6 +70,7 @@ impl MemoryService {
             crypto,
             broker_token,
             broker: builder.build().context("无法初始化宿主连接")?,
+            public_base,
         })
     }
 }
@@ -79,5 +86,6 @@ pub async fn build(config: RuntimeConfig) -> AnyResult<Arc<MemoryService>> {
         crypto,
         config.broker_socket,
         config.broker_token,
+        config.public_base,
     )?))
 }

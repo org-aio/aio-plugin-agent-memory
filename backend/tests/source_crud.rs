@@ -1,14 +1,18 @@
 use anyhow::Result;
 use axum::{
     Json, Router,
+    body::to_bytes,
     extract::{Path, Query, State},
     routing::post,
 };
-use az_memory_model::{AttachmentDraft, CaptureRequest, SourceQuery, SourceUpdate, TaskFailure};
+use az_memory_model::{
+    AttachmentDraft, CaptureRequest, ShareRequest, SourceQuery, SourceUpdate, TaskFailure,
+};
 use az_memory_server::{
     cryptography::Cryptography,
     model::MemoryContext,
     service::{self, MemoryError, MemoryService},
+    transport::Ingress,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -27,6 +31,20 @@ type Vault = Arc<Mutex<HashMap<String, (String, String)>>>;
 
 fn service_error(error: MemoryError) -> anyhow::Error {
     anyhow::anyhow!("{error:?}")
+}
+
+/// 匿名入口必须同时具备入口票据、固定租户和公开标记。
+fn public_headers() -> (Ingress, axum::http::HeaderMap) {
+    let token = "test-public-token-0000000000000000".to_owned();
+    let ingress = Ingress {
+        token: token.clone(),
+        tenant: Some("test".into()),
+    };
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("x-aio-token", token.parse().expect("票据有效"));
+    headers.insert("x-aio-public", "1".parse().expect("标记有效"));
+    headers.insert("x-aio-tenant-id", "test".parse().expect("租户有效"));
+    (ingress, headers)
 }
 
 #[derive(Deserialize)]
@@ -101,6 +119,7 @@ async fn source_crud_preserves_isolation_permissions_versions_and_leases() -> Re
         include_str!("../migrations/0005_recorded_queries.sql"),
         include_str!("../migrations/0006_ssh.sql"),
         include_str!("../migrations/0007_attachments.sql"),
+        include_str!("../migrations/0008_shares.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -117,6 +136,7 @@ async fn source_crud_preserves_isolation_permissions_versions_and_leases() -> Re
         Cryptography::new(Some(socket.clone()), Some("test-only".into())),
         None,
         None,
+        "/api/runtime/components/public/test/tenant".into(),
     )?);
     // 子任务捕获断言失败，确保本次拥有的 schema 和 socket 仍能清理。
     let outcome = tokio::spawn(run_cases(service, pool.clone())).await;
@@ -205,6 +225,99 @@ async fn run_cases(service: Arc<MemoryService>, pool: sqlx::PgPool) -> Result<()
             .fetch_one(&pool)
             .await?;
     assert_ne!(stored_image, png);
+    // 外链默认一天，页面只读取净化正文和图片；重新生成会让旧地址立即失效。
+    let share = service::share::create(
+        State(service.clone()),
+        Path(captured.id.clone()),
+        owner.clone(),
+        Json(ShareRequest {
+            expires_in_seconds: None,
+        }),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert!(
+        share
+            .path
+            .starts_with("/api/runtime/components/public/test/tenant/s/")
+    );
+    let token = share.path.rsplit('/').next().unwrap_or_default().to_owned();
+    assert_eq!(token.len(), 64);
+    let current = service::share::get(
+        State(service.clone()),
+        Path(captured.id.clone()),
+        owner.clone(),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert_eq!(
+        current.as_ref().map(|link| link.path.as_str()),
+        Some(share.path.as_str())
+    );
+    let (ingress, headers) = public_headers();
+    let response = service::share::page(&service, &ingress, &headers, &token).await;
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = String::from_utf8(to_bytes(response.into_body(), 4_000_000).await?.to_vec())?;
+    assert!(body.contains("读书笔记"));
+    assert!(body.contains("保密字段"));
+    assert!(!body.contains("test-canary"));
+    let outsider = MemoryContext {
+        user_id: "outsider".into(),
+        ..owner.clone()
+    };
+    assert!(matches!(
+        service::share::create(
+            State(service.clone()),
+            Path(captured.id.clone()),
+            outsider,
+            Json(ShareRequest {
+                expires_in_seconds: None,
+            }),
+        )
+        .await,
+        Err(MemoryError::Access)
+    ));
+    let regenerated = service::share::create(
+        State(service.clone()),
+        Path(captured.id.clone()),
+        owner.clone(),
+        Json(ShareRequest {
+            expires_in_seconds: Some(3_600),
+        }),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert_ne!(regenerated.path, share.path);
+    let old = service::share::page(&service, &ingress, &headers, &token).await;
+    assert_eq!(old.status(), axum::http::StatusCode::NOT_FOUND);
+    let current_token = regenerated
+        .path
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    sqlx::query("UPDATE plugin_memory_shares SET created_at=0,expires_at=$2 WHERE source_id=$1")
+        .bind(&captured.id)
+        .bind(1_i64)
+        .execute(&pool)
+        .await?;
+    let expired = service::share::page(&service, &ingress, &headers, &current_token).await;
+    let expired_body = String::from_utf8(to_bytes(expired.into_body(), 4_000_000).await?.to_vec())?;
+    assert!(expired_body.contains("已过期"));
+    let revoked = service::share::revoke(
+        State(service.clone()),
+        Path(captured.id.clone()),
+        owner.clone(),
+    )
+    .await
+    .map_err(service_error)?;
+    assert_eq!(revoked, axum::http::StatusCode::NO_CONTENT);
+    let missing = service::share::page(&service, &ingress, &headers, &current_token).await;
+    assert_eq!(missing.status(), axum::http::StatusCode::NOT_FOUND);
+
     let secret = &captured.secrets[0].id;
     let ciphertext: Vec<u8> =
         sqlx::query_scalar("SELECT ciphertext FROM plugin_memory_sources WHERE id=$1")

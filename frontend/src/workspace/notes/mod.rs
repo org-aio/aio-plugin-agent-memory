@@ -43,6 +43,7 @@ pub struct NotesState {
 enum ActiveDialog {
     Detail(String),
     Edit(SourceView),
+    Share(SourceView),
     Delete(SourceView),
 }
 
@@ -150,6 +151,7 @@ pub fn Notes() -> Element {
                                 item::NoteItem { key: "{source.id}", source,
                                     on_open: move |id| dialog.set(Some(ActiveDialog::Detail(id))),
                                     on_edit: move |source| dialog.set(Some(ActiveDialog::Edit(source))),
+                                    on_share: move |source| dialog.set(Some(ActiveDialog::Share(source))),
                                     on_delete: move |source| dialog.set(Some(ActiveDialog::Delete(source))),
                                 }
                             }
@@ -162,8 +164,9 @@ pub fn Notes() -> Element {
         }
         if let Some(active) = dialog() {
             match active {
-                ActiveDialog::Detail(id) => rsx! { dialogs::NoteDetail { key: "{id}", id, on_close: move |_| dialog.set(None), on_edit: move |source| dialog.set(Some(ActiveDialog::Edit(source))) } },
+                ActiveDialog::Detail(id) => rsx! { dialogs::NoteDetail { key: "{id}", id, on_close: move |_| dialog.set(None), on_edit: move |source| dialog.set(Some(ActiveDialog::Edit(source))), on_share: move |source| dialog.set(Some(ActiveDialog::Share(source))) } },
                 ActiveDialog::Edit(source) => rsx! { dialogs::NoteEditor { key: "{source.id}", source, on_close: move |_| dialog.set(None) } },
+                ActiveDialog::Share(source) => rsx! { dialogs::ShareDialog { key: "{source.id}", source, on_close: move |_| dialog.set(None) } },
                 ActiveDialog::Delete(source) => rsx! { dialogs::NoteDelete { source, on_close: move |_| dialog.set(None), on_deleted: move |_| { offset.set(0); dialog.set(None); } } },
             }
         }

@@ -1,7 +1,7 @@
 use crate::{model::MemoryContext, service::MemoryService};
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, Request, State},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -59,6 +59,25 @@ async fn authenticate(
     next.run(request).await
 }
 
+/// 匿名页只接受宿主公开入口：固定租户、公开标记和入口票据，且不得携带用户身份。
+pub(crate) fn public_ingress(ingress: &Ingress, headers: &axum::http::HeaderMap) -> bool {
+    let single = |name: &str| {
+        let mut values = headers.get_all(name).iter();
+        let value = values.next()?.to_str().ok()?.to_owned();
+        (values.next().is_none()).then_some(value)
+    };
+    single("x-aio-token")
+        .is_some_and(|token| token.as_bytes().ct_eq(ingress.token.as_bytes()).unwrap_u8() == 1)
+        && single("x-aio-public").as_deref() == Some("1")
+        && ["x-aio-user-id", "x-aio-context", "cookie", "authorization"]
+            .iter()
+            .all(|name| !headers.contains_key(*name))
+        && match ingress.tenant.as_deref() {
+            Some(bound) => single("x-aio-tenant-id").as_deref() == Some(bound),
+            None => true,
+        }
+}
+
 pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
     let application = Router::new()
         .route(
@@ -89,6 +108,12 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
         .route(
             "/sources/{id}/attachments/{attachment_id}",
             get(crate::service::intake::attachment),
+        )
+        .route(
+            "/sources/{id}/share",
+            get(crate::service::share::get)
+                .post(crate::service::share::create)
+                .delete(crate::service::share::revoke),
         )
         .route("/sources/{id}/retry", post(crate::service::intake::retry))
         .route(
@@ -151,10 +176,29 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
         .route("/import", post(crate::service::intake::import))
         .route("/context", post(crate::service::graph::context))
         .layer(DefaultBodyLimit::max(512 * 1024))
-        .layer(middleware::from_fn_with_state(ingress, authenticate))
-        .with_state(service);
+        .layer(middleware::from_fn_with_state(
+            ingress.clone(),
+            authenticate,
+        ))
+        .with_state(service.clone());
+    let public =
+        Router::new().route(
+            "/s/{token}",
+            get({
+                let service = service.clone();
+                let ingress = ingress.clone();
+                move |headers: axum::http::HeaderMap, Path(token): Path<String>| {
+                    let service = service.clone();
+                    let ingress = ingress.clone();
+                    async move {
+                        crate::service::share::page(&service, &ingress, &headers, &token).await
+                    }
+                }
+            }),
+        );
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/aio/describe", get(crate::hosting::describe))
+        .merge(public)
         .merge(application)
 }

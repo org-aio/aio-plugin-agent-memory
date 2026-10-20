@@ -89,6 +89,7 @@ async fn graph_overview_keeps_knowledge_relations_despite_many_sources() -> Resu
         include_str!("../migrations/0005_recorded_queries.sql"),
         include_str!("../migrations/0006_ssh.sql"),
         include_str!("../migrations/0007_attachments.sql"),
+        include_str!("../migrations/0008_shares.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -105,6 +106,7 @@ async fn graph_overview_keeps_knowledge_relations_despite_many_sources() -> Resu
         Cryptography::new(Some(socket.clone()), Some("test-only".into())),
         None,
         None,
+        "/api/runtime/components/public/test/tenant".into(),
     )?);
     let outcome = tokio::spawn(run_cases(service, pool.clone())).await;
     pool.close().await;
