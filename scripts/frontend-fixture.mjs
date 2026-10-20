@@ -69,13 +69,29 @@ function installFixture() {
       const sshAlias = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
       if (route === "/ssh/devices") return window.__memorySshDevices;
       if (route === "/ssh/hosts" && method === "GET") return window.__memorySshHosts;
+      if (route === "/ssh/import" && method === "POST") {
+        if (readonly) throw new Error("当前空间只读");
+        const device = window.__memorySshDevices.find((item) => item.id === body.deviceId);
+        if (!device) throw new Error("设备不存在");
+        const candidates = [{ alias: "fixture-edge", hostname: "203.0.113.20", user: "ops", port: 2202, identityFile: "fixture-edge_ed25519", status: "registered" }];
+        const imported = [];
+        const skipped = [];
+        for (const item of candidates) {
+          if (window.__memorySshHosts.some((host) => host.alias === item.alias)) { skipped.push(`${item.alias}（已存在）`); continue; }
+          const host = { id: `ssh-${serial++}`, ...item, deviceId: body.deviceId, deviceLabel: device.label,
+            lastError: null, version: 1, updatedAt: Date.now() };
+          window.__memorySshHosts.unshift(host); imported.push(host);
+        }
+        return { imported, skipped, message: `已导入 ${imported.length} 条；已存在 ${skipped.length} 条` };
+      }
       if (route === "/ssh/hosts" && method === "POST") {
         if (readonly) throw new Error("当前空间只读");
         if (!sshAlias.test(body.alias)) throw new Error("SSH 别名只能包含字母、数字、点、下划线和连字符");
         if (window.__memorySshHosts.some((host) => host.alias === body.alias)) throw new Error("该 SSH 别名已存在");
         const host = {
           id: `ssh-${serial++}`, alias: body.alias, hostname: body.hostname, user: body.user,
-          port: body.port, identityFile: body.identityFile, deviceId: body.deviceId,
+          port: body.port, identityFile: body.identityFile, proxyJump: body.proxyJump || "", proxyCommand: body.proxyCommand || "",
+          deviceId: body.deviceId,
           deviceLabel: window.__memorySshDevices.find((item) => item.id === body.deviceId)?.label || "",
           status: "draft", lastError: null, version: 1, updatedAt: Date.now(),
         };
@@ -92,7 +108,8 @@ function installFixture() {
           if (!sshAlias.test(body.alias)) throw new Error("SSH 别名只能包含字母、数字、点、下划线和连字符");
           Object.assign(host, {
             alias: body.alias, hostname: body.hostname, user: body.user, port: body.port,
-            identityFile: body.identityFile, deviceId: body.deviceId,
+            identityFile: body.identityFile, proxyJump: body.proxyJump || "", proxyCommand: body.proxyCommand || "",
+            deviceId: body.deviceId,
             deviceLabel: window.__memorySshDevices.find((item) => item.id === body.deviceId)?.label || "",
             status: "draft", lastError: null, version: host.version + 1, updatedAt: Date.now(),
           });

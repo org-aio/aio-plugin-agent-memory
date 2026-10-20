@@ -30,3 +30,6 @@ jobs:
       - run: cargo test -p az-memory-server --test source_crud --locked -- --ignored
         env:
           AIO_MEMORY_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/aio_memory_crud_test
+      - run: cargo test -p az-memory-server --test ssh_crud --locked -- --ignored
+        env:
+          AIO_MEMORY_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/aio_memory_crud_test

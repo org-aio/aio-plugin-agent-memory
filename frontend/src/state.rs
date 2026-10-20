@@ -1,7 +1,8 @@
 use crate::transport;
 use az_memory_model::{
     CompilationResult, MemoryGraph, MemoryNode, MemorySpace, NodeDraft, NodeKind, SearchRequest,
-    SecretSummary, SourceView, SshApplyResult, SshDevice, SshHost, SshHostDraft,
+    SecretSummary, SourceView, SshApplyResult, SshDevice, SshHost, SshHostDraft, SshImportDraft,
+    SshImportResult,
 };
 use dioxus::prelude::*;
 use serde_json::json;
@@ -217,6 +218,26 @@ pub async fn save_ssh_host(
             state.write().notice = Some("SSH 主机配置已保存".into());
             refresh(state).await;
             Ok(host)
+        }
+        Err(error) => {
+            state.write().error = Some(error.clone());
+            Err(error)
+        }
+    }
+}
+
+/// 后端直接向选定设备读取现有配置；前端只传设备 ID。
+pub async fn import_ssh_hosts(
+    mut state: Signal<MemoryState>,
+    device_id: String,
+) -> Result<SshImportResult, String> {
+    let body =
+        serde_json::to_value(SshImportDraft { device_id }).map_err(|error| error.to_string())?;
+    match transport::request::<SshImportResult>("POST", "/ssh/import", body).await {
+        Ok(result) => {
+            state.write().notice = Some(result.message.clone());
+            refresh(state).await;
+            Ok(result)
         }
         Err(error) => {
             state.write().error = Some(error.clone());

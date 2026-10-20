@@ -31,7 +31,7 @@ pub use share::{
 pub use spaces::{add_member, list, members, remove_member};
 pub use ssh::{
     apply as ssh_apply, create as ssh_create, delete as ssh_delete, devices as ssh_devices,
-    list as ssh_list, update as ssh_update, verify as ssh_verify,
+    import as ssh_import, list as ssh_list, update as ssh_update, verify as ssh_verify,
 };
 
 use crate::{configuration::RuntimeConfig, cryptography::Cryptography};

@@ -56,6 +56,7 @@
 | GET | `/ssh/devices` | 通过宿主 `POST /workers` 列出已授权 `ssh.manage` 的配对设备 |
 | POST | `/ssh/hosts/{id}/apply` | 将 alias、主机、用户、端口和身份文件名写入设备 `~/.ssh/config` 托管块，状态置 applied |
 | POST | `/ssh/hosts/{id}/verify` | 确保设备存在本机 Ed25519 密钥，再以 `BatchMode=yes` 校验免密登录，返回公钥 |
+| POST | `/ssh/import` | 后端向指定配对设备发起 `inspect`，把已有配置登记为记忆主机；保留跳板/代理字段，跳过本机转发、插件托管和已存在的 alias |
 
 主机记录只保存 alias、主机、用户、端口、身份文件名和配对设备标识，不保存私钥、密码或设备令牌。调用经宿主 Unix socket 转发到配对设备，设备端只接受 `inspect`、`upsert`、`remove`、`ensure-key`、`verify` 固定动作；不接收任意 shell。首次向远端安装公钥仍需用户在设备终端用 `ssh-copy-id` 完成。
 

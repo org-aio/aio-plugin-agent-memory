@@ -134,6 +134,7 @@ pub fn router(service: Arc<MemoryService>, ingress: Ingress) -> Router {
             "/ssh/hosts",
             get(crate::service::ssh::list).post(crate::service::ssh::create),
         )
+        .route("/ssh/import", post(crate::service::ssh::import))
         .route(
             "/ssh/hosts/{id}",
             put(crate::service::ssh::update).delete(crate::service::ssh::delete),

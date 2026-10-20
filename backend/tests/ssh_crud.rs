@@ -49,6 +49,11 @@ async fn workers(State(host): State<Host>, Json(body): Json<Value>) -> Json<Valu
                     json!({"created":true,"path":"/home/.ssh/id_ed25519","mode":384,"publicKey":"ssh-ed25519 AAAAC3 fixture"})
                 }
                 "verify" => json!({"alias":"okm","verified":true,"stdout":""}),
+                "inspect" => json!({"hosts":[
+                    {"alias":"okm","hostname":"61.163.60.13","user":"root","port":22,"identityFile":"id_ed25519","managed":true},
+                    {"alias":"tianjin-frp","hostname":"127.0.0.1","user":"root","port":28083,"identityFile":"tianjin-frp_ed25519","managed":false,"unportable":"本机转发连接"},
+                    {"alias":"macmini","hostname":"ssh.addzero.site","user":"zjarlin","port":22,"identityFile":"nexus-deploy","managed":false,"proxyCommand":"/usr/local/bin/cloudflared access ssh --hostname %h"}
+                ],"key":{"exists":true,"mode":384}}),
                 "remove" => json!({"alias":"okm","removed":true}),
                 _ => json!({"alias":"okm","configured":true}),
             };
@@ -89,6 +94,9 @@ async fn ssh_hosts_apply_verify_and_remove_through_paired_device() -> Result<()>
         include_str!("../migrations/0004_source_versions.sql"),
         include_str!("../migrations/0005_recorded_queries.sql"),
         include_str!("../migrations/0006_ssh.sql"),
+        include_str!("../migrations/0007_attachments.sql"),
+        include_str!("../migrations/0008_shares.sql"),
+        include_str!("../migrations/0009_ssh_proxy.sql"),
     ] {
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -148,6 +156,8 @@ async fn run_cases(service: Arc<MemoryService>, host: Host) -> Result<()> {
             user: "root".into(),
             port: 22,
             identity_file: "id_ed25519".into(),
+            proxy_jump: String::new(),
+            proxy_command: String::new(),
             device_id: "11111111-1111-4111-8111-111111111111".into(),
             version: None,
         }),
@@ -191,6 +201,58 @@ async fn run_cases(service: Arc<MemoryService>, host: Host) -> Result<()> {
         .collect();
     assert_eq!(actions, ["upsert", "ensure-key", "verify"]);
 
+    // 从设备读取的现有配置可以登记，重复 alias 与代理条目会被跳过。
+    let imported = service::ssh::import(
+        axum::extract::State(service.clone()),
+        owner.clone(),
+        Json(az_memory_model::SshImportDraft {
+            device_id: "11111111-1111-4111-8111-111111111111".into(),
+        }),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert!(
+        imported
+            .skipped
+            .iter()
+            .any(|item| item.contains("tianjin-frp") && item.contains("本机转发连接"))
+    );
+    assert!(imported.skipped.iter().any(|item| item.contains("okm")));
+    let macmini = imported
+        .imported
+        .iter()
+        .find(|host| host.alias == "macmini")
+        .unwrap();
+    assert_eq!(macmini.status, "registered");
+    assert_eq!(
+        macmini.proxy_command,
+        "/usr/local/bin/cloudflared access ssh --hostname %h"
+    );
+    assert!(imported.skipped.iter().any(|item| item.contains("已存在")));
+
+    // 仅登记的主机改成代理后必须回到 draft，等待用户明确重写设备。
+    let edited = service::ssh::update(
+        axum::extract::State(service.clone()),
+        Path(macmini.id.clone()),
+        owner.clone(),
+        Json(SshHostDraft {
+            alias: macmini.alias.clone(),
+            hostname: macmini.hostname.clone(),
+            user: macmini.user.clone(),
+            port: macmini.port,
+            identity_file: macmini.identity_file.clone(),
+            proxy_jump: String::new(),
+            proxy_command: "cloudflared access ssh --hostname %h".into(),
+            device_id: macmini.device_id.clone(),
+            version: Some(macmini.version),
+        }),
+    )
+    .await
+    .map_err(service_error)?
+    .0;
+    assert_eq!(edited.status, "draft");
+
     // 设备删除失败时必须保留记录并写入错误状态。
     *host.fail_remove.lock().await = true;
     let failure = service::ssh::delete(
@@ -204,8 +266,11 @@ async fn run_cases(service: Arc<MemoryService>, host: Host) -> Result<()> {
         .await
         .map_err(service_error)?
         .0;
-    assert_eq!(hosts.len(), 1);
-    assert_eq!(hosts[0].status, "error");
+    let failed = hosts
+        .iter()
+        .find(|host| host.id == created.id)
+        .expect("删除失败必须保留目标记录");
+    assert_eq!(failed.status, "error");
 
     // 设备恢复后删除应同时移除记录。
     *host.fail_remove.lock().await = false;
@@ -221,7 +286,7 @@ async fn run_cases(service: Arc<MemoryService>, host: Host) -> Result<()> {
         .await
         .map_err(service_error)?
         .0;
-    assert!(hosts.is_empty());
+    assert!(hosts.iter().all(|host| host.id != created.id));
 
     // 非法 alias 在写入前被拒绝。
     let invalid = service::ssh::create(
@@ -233,6 +298,8 @@ async fn run_cases(service: Arc<MemoryService>, host: Host) -> Result<()> {
             user: "root".into(),
             port: 22,
             identity_file: "id_ed25519".into(),
+            proxy_jump: String::new(),
+            proxy_command: String::new(),
             device_id: "11111111-1111-4111-8111-111111111111".into(),
             version: None,
         }),

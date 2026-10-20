@@ -190,3 +190,10 @@
 .memory-share__expiry { margin: 0; color: var(--muted-foreground); font-size: 12px; }
 .memory-share__days { display: flex; align-items: center; gap: 10px; }
 .memory-share__days-input { width: 88px; padding: 7px 9px; border: 1px solid var(--input); border-radius: 6px; background: var(--background); color: var(--foreground); }
+.memory-ssh__header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.memory-ssh__header-actions .dx-button { margin-left: 0; }
+.memory-simport { display: grid; gap: 10px; padding: 12px 2px; }
+.memory-simport__note { margin: 0; font-size: 12px; line-height: 18px; color: var(--muted-foreground); }
+@media (max-width: 640px) {
+  .memory-ssh__header-actions { margin-left: 0; flex-wrap: wrap; }
+}

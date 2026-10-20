@@ -5,7 +5,9 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use az_memory_model::{SshApplyResult, SshDevice, SshHost, SshHostDraft};
+use az_memory_model::{
+    SshApplyResult, SshDevice, SshHost, SshHostDraft, SshImportDraft, SshImportResult,
+};
 use reqwest::Client;
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -42,7 +44,7 @@ pub async fn create(
     let label = device_label(&service, &context, &draft.device_id).await?;
     let id = super::access::id();
     let now = super::access::now();
-    sqlx::query("INSERT INTO plugin_memory_ssh_hosts(id,tenant_id,user_id,alias,hostname,username,port,identity_file,device_id,device_label,status,version,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft',1,$11)")
+    sqlx::query("INSERT INTO plugin_memory_ssh_hosts(id,tenant_id,user_id,alias,hostname,username,port,identity_file,proxy_jump,proxy_command,device_id,device_label,status,version,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',1,$13)")
         .bind(&id)
         .bind(&context.tenant_id)
         .bind(&context.user_id)
@@ -51,6 +53,8 @@ pub async fn create(
         .bind(&draft.user)
         .bind(draft.port as i32)
         .bind(&draft.identity_file)
+        .bind(&draft.proxy_jump)
+        .bind(&draft.proxy_command)
         .bind(&draft.device_id)
         .bind(&label)
         .bind(now)
@@ -58,6 +62,148 @@ pub async fn create(
         .await
         .map_err(unique_error)?;
     load(&service, &context, &id).await.map(Json)
+}
+
+/// 从配对设备读取现有 SSH 配置并登记为主机元数据。
+///
+/// 由后端直接向选定设备发起 `inspect`，不接受前端提交的主机清单；
+/// 只保存别名、主机、用户、端口、私钥文件名和跳板/代理字段，不上传私钥内容。
+/// 已由本插件托管的条目跳过，避免把设备现有配置重复登记。
+pub async fn import(
+    State(service): State<Arc<MemoryService>>,
+    context: MemoryContext,
+    Json(draft): Json<SshImportDraft>,
+) -> Result<Json<SshImportResult>> {
+    require_editor(&context)?;
+    Uuid::parse_str(&draft.device_id).map_err(|_| MemoryError::Input("设备 ID 无效".into()))?;
+    let label = device_label(&service, &context, &draft.device_id).await?;
+    let task = broker(&service)
+        .submit(
+            &context,
+            &draft.device_id,
+            json!({"action":"inspect"}),
+            task_id(),
+        )
+        .await?;
+    if !task_success(&task) {
+        return Err(MemoryError::Input(task_error(&task)));
+    }
+    let configured = task
+        .pointer("/result/hosts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| MemoryError::storage(anyhow::anyhow!("设备未返回 SSH 配置")))?;
+    if configured.len() > 200 {
+        return Err(MemoryError::Input(
+            "设备 SSH 配置超过 200 条，请先精简".into(),
+        ));
+    }
+    let existing: Vec<String> = sqlx::query_scalar(
+        "SELECT alias FROM plugin_memory_ssh_hosts WHERE tenant_id=$1 AND user_id=$2",
+    )
+    .bind(&context.tenant_id)
+    .bind(&context.user_id)
+    .fetch_all(&service.pool)
+    .await?;
+    // 设备上已存在的配置不能标成 draft：这里没有重写它，标 draft 会误导用户再点“写入”。
+    // 新建和编辑仍使用 draft，明确表示尚未把这条元数据写到设备。
+    let mut imported = Vec::new();
+    let mut skipped = Vec::new();
+    for row in configured {
+        let alias = row.get("alias").and_then(Value::as_str).unwrap_or_default();
+        if let Some(reason) = row.get("unportable").and_then(Value::as_str) {
+            skipped.push(format!("{alias}（{reason}）"));
+            continue;
+        }
+        let candidate = SshHostDraft {
+            alias: alias.to_owned(),
+            hostname: row
+                .get("hostname")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            user: row
+                .get("user")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            port: row
+                .get("port")
+                .and_then(Value::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(22),
+            identity_file: row
+                .get("identityFile")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            proxy_jump: row
+                .get("proxyJump")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            proxy_command: row
+                .get("proxyCommand")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            device_id: draft.device_id.clone(),
+            version: None,
+        };
+        let candidate = match validate(candidate) {
+            Ok(candidate) => candidate,
+            Err(MemoryError::Input(reason)) => {
+                skipped.push(format!("{alias}（{reason}）"));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        // 设备端 inspect 也会列出本插件托管块；managed 视为已在设备写入，
+        // 这次导入不重复登记。
+        if imported
+            .iter()
+            .any(|host: &SshHost| host.alias == candidate.alias)
+        {
+            skipped.push(format!("{alias}（已存在）"));
+            continue;
+        }
+        let managed = row.get("managed").and_then(Value::as_bool).unwrap_or(false);
+        if managed || existing.iter().any(|item| item == &candidate.alias) {
+            skipped.push(format!("{alias}（已存在）"));
+            continue;
+        }
+        let id = super::access::id();
+        // 设备上原本就存在且未由插件托管的配置只登记为 registered，不暗示需要重写。
+        let status = "registered";
+        sqlx::query("INSERT INTO plugin_memory_ssh_hosts(id,tenant_id,user_id,alias,hostname,username,port,identity_file,proxy_jump,proxy_command,device_id,device_label,status,version,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1,$14)")
+            .bind(&id)
+            .bind(&context.tenant_id)
+            .bind(&context.user_id)
+            .bind(&candidate.alias)
+            .bind(&candidate.hostname)
+            .bind(&candidate.user)
+            .bind(candidate.port as i32)
+            .bind(&candidate.identity_file)
+            .bind(&candidate.proxy_jump)
+            .bind(&candidate.proxy_command)
+            .bind(&candidate.device_id)
+            .bind(&label)
+            .bind(status)
+            .bind(super::access::now())
+            .execute(&service.pool)
+            .await
+            .map_err(unique_error)?;
+        imported.push(load(&service, &context, &id).await?);
+    }
+    let message = match (imported.len(), skipped.len()) {
+        (0, skipped) => format!("没有新增主机；已存在 {} 条", skipped),
+        (added, 0) => format!("已导入 {added} 条主机配置"),
+        (added, skipped) => format!("已导入 {added} 条；已存在 {skipped} 条"),
+    };
+    Ok(Json(SshImportResult {
+        imported,
+        skipped,
+        message,
+    }))
 }
 
 pub async fn update(
@@ -72,27 +218,60 @@ pub async fn update(
     let version = draft
         .version
         .ok_or_else(|| MemoryError::Input("缺少版本".into()))?;
+    let mut tx = service.pool.begin().await?;
+    let current = sqlx::query("SELECT alias,hostname,username,port,identity_file,proxy_jump,proxy_command,device_id FROM plugin_memory_ssh_hosts WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND version=$4 FOR UPDATE")
+        .bind(&id)
+        .bind(&context.tenant_id)
+        .bind(&context.user_id)
+        .bind(version)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(MemoryError::Stale)?;
+    // 只登记过、设备上确实存在的主机：只改 alias 或设备标签时仍是 registered；
+    // 任何连接字段变化都说明记录与设备不再一致，必须回到 draft 等待重写。
+    let unchanged = current.try_get::<String, _>("hostname")? == draft.hostname
+        && current.try_get::<String, _>("username")? == draft.user
+        && current.try_get::<i32, _>("port")? == draft.port as i32
+        && current.try_get::<String, _>("identity_file")? == draft.identity_file
+        && current.try_get::<String, _>("proxy_jump")? == draft.proxy_jump
+        && current.try_get::<String, _>("proxy_command")? == draft.proxy_command
+        && current.try_get::<String, _>("device_id")? == draft.device_id;
+    let old_status =
+        sqlx::query_scalar::<_, String>("SELECT status FROM plugin_memory_ssh_hosts WHERE id=$1")
+            .bind(&id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let status = if old_status == "registered" && unchanged {
+        "registered"
+    } else {
+        "draft"
+    };
     let label = device_label(&service, &context, &draft.device_id).await?;
-    let changed = sqlx::query("UPDATE plugin_memory_ssh_hosts SET alias=$1,hostname=$2,username=$3,port=$4,identity_file=$5,device_id=$6,device_label=$7,status='draft',last_error=NULL,version=version+1,updated_at=$8 WHERE id=$9 AND tenant_id=$10 AND user_id=$11 AND version=$12")
+    let changed = sqlx::query("UPDATE plugin_memory_ssh_hosts SET alias=$1,hostname=$2,username=$3,port=$4,identity_file=$5,proxy_jump=$6,proxy_command=$7,device_id=$8,device_label=$9,status=$10,last_error=NULL,version=version+1,updated_at=$11 WHERE id=$12 AND tenant_id=$13 AND user_id=$14 AND version=$15")
         .bind(&draft.alias)
         .bind(&draft.hostname)
         .bind(&draft.user)
         .bind(draft.port as i32)
         .bind(&draft.identity_file)
+        .bind(&draft.proxy_jump)
+        .bind(&draft.proxy_command)
         .bind(&draft.device_id)
         .bind(&label)
+        .bind(status)
         .bind(super::access::now())
         .bind(&id)
         .bind(&context.tenant_id)
         .bind(&context.user_id)
         .bind(version)
-        .execute(&service.pool)
+        .execute(&mut *tx)
         .await
         .map_err(unique_error)?
         .rows_affected();
     if changed != 1 {
+        tx.rollback().await?;
         return Err(MemoryError::Stale);
     }
+    tx.commit().await?;
     load(&service, &context, &id).await.map(Json)
 }
 
@@ -170,7 +349,7 @@ pub async fn apply(
         .submit(
             &context,
             &host.device_id,
-            json!({"action":"upsert","alias":host.alias,"hostname":host.hostname,"user":host.user,"port":host.port,"identityFile":host.identity_file.replace(".pub", "")}),
+            json!({"action":"upsert","alias":host.alias,"hostname":host.hostname,"user":host.user,"port":host.port,"identityFile":host.identity_file.replace(".pub", ""),"proxyJump":host.proxy_jump,"proxyCommand":host.proxy_command}),
             task_id(),
         )
         .await?;
@@ -226,7 +405,7 @@ pub async fn verify(
         .submit(
             &context,
             &host.device_id,
-            json!({"action":"verify","alias":host.alias,"hostname":host.hostname,"user":host.user,"port":host.port,"identityFile":host.identity_file}),
+            json!({"action":"verify","alias":host.alias,"hostname":host.hostname,"user":host.user,"port":host.port,"identityFile":host.identity_file,"proxyJump":host.proxy_jump,"proxyCommand":host.proxy_command}),
             task_id(),
         )
         .await?;
@@ -311,12 +490,14 @@ fn host(row: sqlx::postgres::PgRow) -> Result<SshHost> {
         port: u16::try_from(row.try_get::<i32, _>(4)?)
             .map_err(|_| MemoryError::storage(anyhow::anyhow!("SSH 端口无效")))?,
         identity_file: row.try_get(5)?,
-        device_id: row.try_get(6)?,
-        device_label: row.try_get(7)?,
-        status: row.try_get(8)?,
-        last_error: row.try_get(9)?,
-        version: row.try_get(10)?,
-        updated_at: row.try_get(11)?,
+        proxy_jump: row.try_get(6)?,
+        proxy_command: row.try_get(7)?,
+        device_id: row.try_get(8)?,
+        device_label: row.try_get(9)?,
+        status: row.try_get(10)?,
+        last_error: row.try_get(11)?,
+        version: row.try_get(12)?,
+        updated_at: row.try_get(13)?,
     })
 }
 
@@ -333,6 +514,8 @@ fn validate(mut draft: SshHostDraft) -> Result<SshHostDraft> {
     draft.hostname = draft.hostname.trim().to_owned();
     draft.user = draft.user.trim().to_owned();
     draft.identity_file = draft.identity_file.trim().to_owned();
+    draft.proxy_jump = draft.proxy_jump.trim().to_owned();
+    draft.proxy_command = draft.proxy_command.trim().to_owned();
     if !alias(&draft.alias) {
         return Err(MemoryError::Input(
             "SSH 别名只能包含字母、数字、点、下划线和连字符".into(),
@@ -349,6 +532,14 @@ fn validate(mut draft: SshHostDraft) -> Result<SshHostDraft> {
     }
     if !identity(&draft.identity_file) {
         return Err(MemoryError::Input("SSH 身份文件无效".into()));
+    }
+    if !proxy(&draft.proxy_jump) || !proxy(&draft.proxy_command) {
+        return Err(MemoryError::Input("SSH 跳板或代理配置包含无效字符".into()));
+    }
+    if !draft.proxy_jump.is_empty() && !draft.proxy_command.is_empty() {
+        return Err(MemoryError::Input(
+            "同一主机不能同时使用 ProxyJump 和 ProxyCommand".into(),
+        ));
     }
     Uuid::parse_str(&draft.device_id).map_err(|_| MemoryError::Input("设备 ID 无效".into()))?;
     Ok(draft)
@@ -380,8 +571,21 @@ fn user(value: &str) -> bool {
     alias(value)
 }
 
+/// 只接受 `~/.ssh` 下的普通文件名，阻止路径穿越和任意文件引用。
 fn identity(value: &str) -> bool {
-    matches!(value, "id_ed25519" | "id_rsa" | "id_ecdsa")
+    let name = value.strip_prefix(".ssh/").unwrap_or(value);
+    !name.is_empty()
+        && name.len() <= 100
+        && !name.starts_with('.')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+        && !name.ends_with(".pub")
+}
+
+/// 代理字段原样写入设备配置，限制长度并拒绝控制字符，防止注入额外配置项。
+fn proxy(value: &str) -> bool {
+    value.len() <= 512 && !value.chars().any(char::is_control)
 }
 
 fn unique_error(error: sqlx::Error) -> MemoryError {
@@ -413,7 +617,7 @@ fn task_error(task: &Value) -> String {
         .collect()
 }
 
-const SELECT: &str = "SELECT id,alias,hostname,username,port,identity_file,device_id,device_label,status,last_error,version,updated_at FROM plugin_memory_ssh_hosts WHERE tenant_id=$1 AND user_id=$2";
+const SELECT: &str = "SELECT id,alias,hostname,username,port,identity_file,proxy_jump,proxy_command,device_id,device_label,status,last_error,version,updated_at FROM plugin_memory_ssh_hosts WHERE tenant_id=$1 AND user_id=$2";
 
 struct Broker {
     client: Client,

@@ -9,6 +9,10 @@ pub struct SshHost {
     pub user: String,
     pub port: u16,
     pub identity_file: String,
+    #[serde(default)]
+    pub proxy_jump: String,
+    #[serde(default)]
+    pub proxy_command: String,
     pub device_id: String,
     pub device_label: String,
     pub status: String,
@@ -27,6 +31,10 @@ pub struct SshHostDraft {
     pub port: u16,
     #[serde(default = "default_identity")]
     pub identity_file: String,
+    #[serde(default)]
+    pub proxy_jump: String,
+    #[serde(default)]
+    pub proxy_command: String,
     pub device_id: String,
     #[serde(default)]
     pub version: Option<i64>,
@@ -40,6 +48,20 @@ pub struct SshDevice {
     pub platform: String,
     pub status: String,
     pub last_seen: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshImportDraft {
+    pub device_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshImportResult {
+    pub imported: Vec<SshHost>,
+    pub skipped: Vec<String>,
+    pub message: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
