@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
+    # 仅本地临时：这是 GitHub Actions 的一次性 service 容器，只存在于 CI 运行器内；
+    # 不得用于主机部署。主机部署一律改用本机统一实例（/root/DockerCompose/postgres）。
       postgres:
         image: postgres:16
         env:
